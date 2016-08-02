@@ -35,6 +35,7 @@ class Parameters
   double kappa4Factor; // factor that multiplies the ratio of kappa4/(g^2 mu^2)^3
   double m;     // mass term to regulate infrared divergence (of order Lambda_QCD)
   double L;     // length in fm of the lattice - needed when including mass regulator - new scale
+  string input_wline; // filename containing Wilson lines used as an input - note that size and NC should match!
 
  public:
 
@@ -82,6 +83,8 @@ class Parameters
   double getm() {return m;}
   void setL(double x) {L=x;}
   double getL() {return L;}
+  void setInputWline(string f){ input_wline = f; }
+  string getInputWline() { return input_wline; }
 
   // switches:
   void setInitMethod(int x) {initMethod=x;}

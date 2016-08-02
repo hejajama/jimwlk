@@ -1,4 +1,6 @@
 #include "Lattice.h"
+#include <iostream>
+#include <fstream>
 
 //constructor
 Lattice::Lattice(Parameters *param, int N, int length)
@@ -34,3 +36,18 @@ Lattice::~Lattice()
   delete[] cells;
 }
 
+void Lattice::PrintWilsonLines(string filename)
+{
+    cout << "Saving Wilson lines into " << filename << endl;
+    fstream output(filename.c_str(),ios::out);
+    int length = sqrt(size);
+    for (int yind=0; yind<length; yind++)
+    {
+        for (int xind=0; xind<length; xind++)
+        {
+            int pos = yind*length+xind;
+            output << yind << " " << xind << " " << cells[pos]->getU().getElementsText() << endl;
+        }
+    }
+    output.close();
+}

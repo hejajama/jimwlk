@@ -8,7 +8,7 @@ DIRS = src
 OBJLIBS	= ./lib/libsrc.a
 LIBS	=  `gsl-config --libs` -L./lib -L/usr/local/lib -L/usr/lib -lfftw3
 EXECUTABLE = main
-CXXFLAGS = -O3 `gsl-config --cflags`
+CXXFLAGS = -O2 `gsl-config --cflags`
 
 all: main
 

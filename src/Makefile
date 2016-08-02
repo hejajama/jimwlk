@@ -10,7 +10,7 @@ INCLUDES = -I.
 OBJLIBS = ../lib/libsrc.a 
 SOURCES = FFT.cpp Matrix.cpp Setup.cpp Init.cpp Random.cpp Group.cpp Lattice.cpp Cell.cpp Measure.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
-CXXFLAGS = -O3 `gsl-config --cflags` 
+CXXFLAGS = -O2 `gsl-config --cflags` 
 
 all: $(OBJLIBS)
 

@@ -6,6 +6,8 @@
 #include <fstream>
 #include <time.h>
 #include <vector>
+#include <sstream>
+#include <gsl/gsl_sf_bessel.h>
 
 #include "Setup.h"
 #include "Init.h"
@@ -100,12 +102,16 @@ int main(int argc, char *argv[])
   init->initU(lat, group, param, random);
   cout << " done." << endl;
 
+    
   //  infrared->regulate(lat, group, param, random, 0);
 
   for(int i=0; i<nn[0]*nn[1]; i++)
     {
       lat->cells[i]->setUi(lat->cells[i]->getU());
     }
+  
+  // Save initial state Wilson lines
+  lat->PrintWilsonLines("wline_evolution/step_0");
 
   // allocate memory
   complex<double> ** xi;
@@ -209,8 +215,28 @@ int main(int argc, char *argv[])
 		  x/=nn[0];
 		  y/=nn[1];
 		  // discretization without singularities
-		  K[pos]->push_back((cos(Pi*y)*(sin(2.*Pi*x)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.))))/nn[0]);
-		  K[pos]->push_back((cos(Pi*x)*(sin(2.*Pi*y)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.))))/nn[0]);
+      double tmpk1 =cos(Pi*y)*(sin(2.*Pi*x)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)))/nn[0];
+      double tmpk2 = cos(Pi*x)*(sin(2.*Pi*y)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)))/nn[0];
+      
+      if (m>0)
+      {
+        // Regulate
+        // Note that we use here r2 which is not in lattice units
+        // because m is in GeV
+        gsl_sf_result bes;
+        int status = gsl_sf_bessel_K1_e(sqrt(r2)*m, &bes);
+        if (status)
+        {
+          cerr << "Bessel function error! argument " << sqrt(r2)*m << endl;
+          exit(1);
+        }
+        tmpk1 *= sqrt(r2)*m*bes.val;
+        tmpk2 *= sqrt(r2)*m*bes.val;
+      }
+      
+      
+		  K[pos]->push_back(tmpk1);
+		  K[pos]->push_back(tmpk2);
 		  // S is a 1d vector
 		  S[pos]->push_back((pow( cos(Pi*y) ,2.)*pow( sin(2.*Pi*x)/(2.*Pi) ,2.)+pow( cos(Pi*x) ,4.)*pow( sin(2.*Pi*y)/(2.*Pi) ,2.))
 				    /pow( (pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)) ,2.)/nn[0]/nn[0]);
@@ -429,7 +455,7 @@ int main(int argc, char *argv[])
 
   for(int ids=1; ids<=steps; ids++)
     {
-      cout << "step " << ids << endl;
+      //cout << "step " << ids << endl;
       for (int i=0; i<cells; i++)
 	{
 	  lat->cells[i]->computeAdjointU();
@@ -603,6 +629,13 @@ int main(int argc, char *argv[])
       //      infrared->regulate(lat, group, param, random, ids);
 
       //cout << " done with step" << endl;
+      
+      // Save intermediate step Wlines
+      if (ids%10==0)
+      {
+        stringstream fname; fname << "wline_evolution/step_" << ids;
+        lat->PrintWilsonLines(fname.str());
+      }
 
       // measure quantities
       if ((ids)%param->getMeasureSteps()==0)
@@ -713,6 +746,7 @@ int readInput(Setup *setup, Parameters *param, int argc, char *argv[])
   param->setkappa4Factor(setup->DFind(file_name,"kappa4Factor"));
   param->setm(setup->DFind(file_name,"m"));
   param->setL(setup->DFind(file_name,"L"));
+  param->setInputWline(setup->StringFind(file_name, "input_wline"));
  
     // write the used parameters into file "usedParameters.dat" as a double check for later
   time_t rawtime;
@@ -728,6 +762,8 @@ int readInput(Setup *setup, Parameters *param, int argc, char *argv[])
   fout1 << "steps " << param->getSteps() << endl;
   fout1 << "measureSteps " << param->getMeasureSteps() << endl;
   fout1 << "initMethod " << param->getInitMethod() << endl;
+  if (param->getInitMethod()==10)
+    fout1 << "input_filename " << param->getInputWline() << endl;
   fout1 << "R " << param->getR() << endl;
   fout1 << "Ny " << param->getNy() << endl;
   fout1 << "g^2 mu a " << param->getg2mu() << endl;

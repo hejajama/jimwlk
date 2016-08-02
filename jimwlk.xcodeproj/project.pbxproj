@@ -13,7 +13,7 @@
 		1312FA251D4F838A00214F58 /* FFT.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = FFT.h; path = src/FFT.h; sourceTree = "<group>"; };
 		1312FA261D4F838A00214F58 /* Group.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Group.cpp; path = src/Group.cpp; sourceTree = "<group>"; };
 		1312FA271D4F838A00214F58 /* Group.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Group.h; path = src/Group.h; sourceTree = "<group>"; };
-		1312FA281D4F838A00214F58 /* Init.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Init.cpp; path = src/Init.cpp; sourceTree = "<group>"; };
+		1312FA281D4F838A00214F58 /* Init.cpp */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 2; lastKnownFileType = sourcecode.cpp.cpp; name = Init.cpp; path = src/Init.cpp; sourceTree = "<group>"; tabWidth = 2; };
 		1312FA291D4F838A00214F58 /* Init.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Init.h; path = src/Init.h; sourceTree = "<group>"; };
 		1312FA2A1D4F838A00214F58 /* Lattice.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Lattice.cpp; path = src/Lattice.cpp; sourceTree = "<group>"; };
 		1312FA2B1D4F838A00214F58 /* Lattice.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Lattice.h; path = src/Lattice.h; sourceTree = "<group>"; };
@@ -23,17 +23,19 @@
 		1312FA2F1D4F838A00214F58 /* MatrixExp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = MatrixExp.h; path = src/MatrixExp.h; sourceTree = "<group>"; };
 		1312FA301D4F838A00214F58 /* Measure.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Measure.cpp; path = src/Measure.cpp; sourceTree = "<group>"; };
 		1312FA311D4F838A00214F58 /* Measure.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Measure.h; path = src/Measure.h; sourceTree = "<group>"; };
-		1312FA321D4F838A00214F58 /* Parameters.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Parameters.h; path = src/Parameters.h; sourceTree = "<group>"; };
+		1312FA321D4F838A00214F58 /* Parameters.h */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 2; lastKnownFileType = sourcecode.c.h; name = Parameters.h; path = src/Parameters.h; sourceTree = "<group>"; tabWidth = 2; };
 		1312FA331D4F838A00214F58 /* Random.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Random.cpp; path = src/Random.cpp; sourceTree = "<group>"; };
 		1312FA341D4F838A00214F58 /* Random.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Random.h; path = src/Random.h; sourceTree = "<group>"; };
 		1312FA351D4F838A00214F58 /* Setup.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Setup.cpp; path = src/Setup.cpp; sourceTree = "<group>"; };
 		1312FA361D4F838A00214F58 /* Setup.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Setup.h; path = src/Setup.h; sourceTree = "<group>"; };
+		1312FA371D4F91D000214F58 /* main.cpp */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 2; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; tabWidth = 2; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
 		1312FA171D4F835000214F58 = {
 			isa = PBXGroup;
 			children = (
+				1312FA371D4F91D000214F58 /* main.cpp */,
 				1312FA221D4F838A00214F58 /* Cell.cpp */,
 				1312FA231D4F838A00214F58 /* Cell.h */,
 				1312FA241D4F838A00214F58 /* FFT.cpp */,
@@ -222,6 +224,7 @@
 				1312FA211D4F835000214F58 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};

@@ -1,4 +1,5 @@
 #include "Matrix.h"
+#include <sstream>
 
 //constructor if just dimension is given
 Matrix::Matrix(int n)
@@ -633,5 +634,16 @@ Matrix& Matrix::logm()
 }
 
 
+// Output matrix elements in text, used when outputting the Wilson lines
+// H.M. 20160801
+string Matrix::getElementsText()
+{
+    stringstream ss;
+    for (int i=0; i<nn; i++)
+    {
+        ss << e[i].real() << " " << e[i].imag() << " ";
+    }
+    return ss.str();
+}
 
 

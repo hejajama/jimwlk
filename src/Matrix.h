@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <vector>
 #include <gsl/gsl_integration.h>  // include gsl for Gauss-Legendre nodes and weights for log Pade
+#include <string>
 
 using namespace std;
 
@@ -56,6 +57,8 @@ public:
     complex<double> trace();
     double FrobeniusNorm();
     double OneNorm();
+    
+    string getElementsText();   // Return string containing elements
 
     //    complex<double> trace() {if (ndim==3) return e[0]+e[4]+e[8]; else if(ndim==2) return e[0]+e[3]; };
     //operators:

@@ -42,6 +42,7 @@ class Init {
   void initU2(Lattice *lat, Group *group, Parameters *param, Random *random);
   void initU3(Lattice *lat, Group *group, Parameters *param, Random *random);
   void initU4(Lattice *lat, Group *group, Parameters *param, Random *random);
+  void initFromData(Lattice *lat, Group *group, Parameters *param, Random *random);
   void initU2old(Lattice *lat, Group *group, Parameters *param, Random *random);
   void computeAx(Lattice *lat, Group *group, Parameters *param, Random *random);
   void computeAx2(Lattice *lat, Group *group, Parameters *param, Random *random);

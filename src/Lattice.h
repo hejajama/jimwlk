@@ -4,6 +4,7 @@
 #include <complex>
 #include <iostream>
 #include <cstdlib>
+#include <string>
 
 #include "Matrix.h"
 #include "Cell.h"
@@ -38,6 +39,8 @@ public:
   int getSize() { return size; };
 
   Cell** cells;         // the actual array of cells, the "lattice". cells is an array of pointers to cell objects
+    
+  void PrintWilsonLines(string filename);
 
 };
 
