@@ -1211,35 +1211,35 @@ void Init::initU3(Lattice *lat, Group *group, Parameters *param, Random *random)
   double g2mu = param->getg2mu(); //g^2 mu a
   double norm = g2mu*g2mu/static_cast<double>(Ny);
   int Nc = param->getNc();
-
+  
   int nn[2];
   nn[0]=param->getSize();
   nn[1]=param->getSize();
-
+  
   Matrix** rho;
   double*** rhoa;
-    
+  
   //  rho = new Matrix**[Ny]; // a rho for every longitudinal 'cell'
-
+  
   int pos;
   int L=param->getSize();
   double fac = sqrt(norm);
-      
+  
   int pos2, pos3;
   int counts;
   double corr[L];
   
   double kt2, kx, ky;
-
+  
   Matrix temp(Nc,1.);
   Matrix UD(Nc,1.);
   Matrix temp2(Nc,0.);
   double temp3;
-   
+  
   double correlator[nn[0]];
   double correlator4[nn[0]];
   double val[nn[0]][nn[0]];
-
+  
   // keep in mind that the normalization was such that \rho is actually g\rho (\rho is prop to g^2\mu here)
   // in this scenario we have to pick g and \mu separately.
   // now define \rho without the g:
@@ -1251,245 +1251,248 @@ void Init::initU3(Lattice *lat, Group *group, Parameters *param, Random *random)
   double SG=0.;
   double S4=0.;
   double mu=g2mu/g/g; // this is mu times a
-  double kappa4=param->getkappa4Factor()*pow(mu,6.)*pow(g,4.)/pow(g,2.); 
+  double kappa4=param->getkappa4Factor()*pow(mu,6.)*pow(g,4.)/pow(g,2.);
   // kappa_4 ~ a^6 (good, since rho~a and the d^2x gives another a^2, such that all a's cancel in s_4)
   // the g^4 comes in because my rho's are proportional to g (and I multiply four of them in the 1/kappa_4 term)
-  // I divide by another g^2 because of the relation kappa_4 ~ 144 mu^6/g^2, coming from 
+  // I divide by another g^2 because of the relation kappa_4 ~ 144 mu^6/g^2, coming from
   // mu^2 = g^2 A/ (2\piR^2) and kappa_4 = 18 g^4A^3/(\pi R^2)^3 (1105.4155, (15) and (17))
   
   cout << "kappa4=" << kappa4 << endl;
   kappa4/=static_cast<double>(Ny); // divide kappa_4 by N_y to compensate for the additional Ny that comes from \rho\rho\rho\rho.
   cout << "kappa4/Ny=" << kappa4 << endl;
   double y;
-
+  
+  cout << "g " << g << " mu " << mu << " g2mu " << g2mu << " rho_normalization " << mu*g/sqrt(static_cast<double>(Ny)) << endl;
+  exit(1);
+  
   int accepted;
   double S4avg;
   int rejections=0;
-
-  for(int k=0; k<Ny; k++)
-    {
-      rejections=0;
-      rho = new Matrix*[nn[0]*nn[1]];
-      rhoa = new double**[nn[0]*nn[1]];
-
-      for(int i=0; i<param->getSize()*param->getSize(); i++)
-	{
-	  rho[i] = new Matrix(param->getNc(),0.);
-	  rhoa[i] = new double*[Nc2m1];
-	}
-
-      for(int i=0; i<param->getSize()*param->getSize(); i++)
-	{
-	  for(int n=0; n<Nc2m1; n++)
-	    {
-	      rhoa[i][n] = new double;
-	    }
-	}
-      
-      S4avg=0.;
-        
-      for (int i=0; i<nn[0]; i++)
-	{
-	  for (int j=0; j<nn[1]; j++)
-	    {
-	      pos = i*nn[1]+j;
-	      accepted=0;
-	      SG=0.;
-	      S4=0.;
-	      while(accepted==0)
-		{
-		  SG=0.;
-		  S4=0.;
-		  for(int n=0; n<Nc2m1; n++)
-		    {
-		      *rhoa[pos][n] = mu*g*random->Gauss()/sqrt(static_cast<double>(Ny)); // generate Gaussian random number 
-		    }
-		  // compute Gaussian action and the quartic part of the action
-		  for(int a=0; a<Nc2m1; a++)
-		    {
-		      SG += (*rhoa[pos][a])*(*rhoa[pos][a])/2./g/g/mu/mu;
-		      for(int b=0; b<Nc2m1; b++)
-			{
-			  S4 += 3./kappa4*(*rhoa[pos][a])*(*rhoa[pos][a])*(*rhoa[pos][b])*(*rhoa[pos][b]);
-			}
-		    }
-// 		  cout << "cell " << pos << endl;
-//		  cout << "SG=" << SG << endl;
-// 		  cout << "S4=" << S4 << endl;
-// 		  cout << "exp(-S4) = " << exp(-S4) << endl;
-// 		  cout << "kappa4=" << kappa4 << endl;
-// 		  cout << "kappa4/(mu^2)^3=" << kappa4/pow(mu,6)/pow(g,6.) << endl;
-		  
-		  //accept rho^a's with probability exp(-S4), otherwise reject
-		  y=random->genrand64_real1();
-		  if (y<exp(-S4))
-		    {
-		      cout << "*kappa4/(kappa4-3.*pow(mu,4.))=" << kappa4/(kappa4-3.*pow(mu,4.)) << endl;
-		      S4avg+=S4;
-		      accepted=1;
-		      cout << " ***** Values at (" << i << "," << j << ") accepted with y=" << y << ", exp(-S4)=" << exp(-S4)
-			   << ", (1-S4)=" << (1-S4) << endl;
-		
-		      cout << "SG=" << SG << endl;
-		      cout << "S4=" << S4 << endl;
-		      for(int n=0; n<Nc2m1; n++)
-			{
-			  *rho[pos]+=(*rhoa[pos][n])*group->getT(n);
-			}
-		    }
-		    else
-		      {
-			//		cout << "Values at (" << i << "," << j << ") rejected with y=" << y << ", exp(-S4)=" << exp(-S4) << endl;
-			rejections+=1;
-		      }
-		    }
-		}
-	    }
-	  
-      cout << rejections << " rejections." << endl;
-      cout << "average S4=" << S4avg/nn[0]/nn[1] << endl;
-
-      double C2[Nc2m1][Nc2m1];
-      double C4[Nc2m1][Nc2m1];
-      double C4m[Nc2m1][Nc2m1];
-
-      for(int a=0; a<Nc2m1; a++)
-	{
-	  for(int b=0; b<Nc2m1; b++)
-	    {
-	      C2[a][b]=0.;
-	      C4[a][b]=0.;
-	      C4m[a][b]=0.;
-	    }
-	}
-
-      int pos2;
-      int C4mcount=0;
-
-      for (int i=0; i<nn[0]; i++)
-	{
-	  for (int j=0; j<nn[1]; j++)
-	    {
-	      pos = i*nn[1]+j;
-	      pos2 = (nn[0]-1-i)*nn[1]+(nn[1]-1-j);
-	      for(int a=0; a<Nc2m1; a++)
-		{
-		  for(int b=0; b<Nc2m1; b++)
-		    {
-		      //cout << i << " " << j << " " << a << " " << b << " " << (*rhoa[pos][a]) << " " << (*rhoa[pos][b]) << endl;
-		      C2[a][b] += (*rhoa[pos][a])*(*rhoa[pos][b]);
-		      C4[a][b] += (*rhoa[pos][a])*(*rhoa[pos][a])*(*rhoa[pos][b])*(*rhoa[pos][b]);
-		      if (pos!=pos2)
-			{
-			  C4m[a][b] += (*rhoa[pos][a])*(*rhoa[pos][a])*(*rhoa[pos2][b])*(*rhoa[pos2][b]);
-			}
-		    }
-		}
-	      C4mcount+=1;
-	    }
-	}
-      
-      for(int a=0; a<Nc2m1; a++)
-	{
-	  for(int b=0; b<Nc2m1; b++)
-	    {
-	      C2[a][b]/=(nn[0]*nn[1]);
-	      C4[a][b]/=(nn[0]*nn[1]);
-	      C4m[a][b]/=C4mcount;
-	    }
-	}
-      cout << "mug=" << mu*g << endl;
-      cout << "fac=" << fac << endl;
-      cout << "Ny=" << Ny << endl;
-      cout << "g^2mu^2=" << g*g*mu*mu << endl;
-      cout << "kappa4=" << kappa4 << endl;
-      cout << " ------------- " << endl;
-      cout << "new g^2mu^2=" << g*g*mu*mu*(1-4.*mu*mu*mu*mu*g*g*g*g/(kappa4/3.)*(Nc*Nc+1.)) << endl;
-      cout << "avg C2[a][a]=" << 1./static_cast<double>(Nc2m1)*(C2[0][0]+C2[1][1]+C2[2][2]+C2[3][3]+C2[4][4]+C2[5][5]+C2[6][6]+C2[7][7]) << endl;
-      cout << "C2[1][1]=" << C2[1][1] << endl;
-      cout << "C2[0][1]=" << C2[0][1] << endl;
-      cout << " ------------- " << endl;
-     
-
-      cout << "perturbative C4(0000)=" 
-	   << pow(g*g*mu*mu*(1-4.*mu*mu*mu*mu*g*g*g*g/(kappa4/3.)*(Nc*Nc+1)),2.)*(3*(1-8*pow(g*g*mu*mu*(1-4.*mu*mu*mu*mu*g*g*g*g/(kappa4/3.)*(Nc*Nc+1)),2.)/(kappa4/3.))) << endl;
-      cout << "C4[0][0]=" << C4[0][0] << endl;
-      cout << "perturbative C4(0011)=" 
-	   << pow(g*g*mu*mu*(1-4.*mu*mu*mu*mu*g*g*g*g/(kappa4/3.)*(Nc*Nc+1)),2.)*((1-8*pow(g*g*mu*mu*(1-4.*mu*mu*mu*mu*g*g*g*g/(kappa4/3.)*(Nc*Nc+1)),2.)/(kappa4/3.))) << endl;
-      cout << "C4[0][1]=" << C4[0][1] << endl;
-      cout << "C4[2][4]=" << C4[2][4] << endl;
-      cout << "perturbative C4(0x0x0u0u)=" 
-	   << pow(g*g*mu*mu*(1-4.*mu*mu*mu*mu*g*g*g*g/(kappa4/3.)*(Nc*Nc+1)),2.) << endl;
-      cout << "avg C4m[0][0]=" << 1./static_cast<double>(Nc2m1)*(C4m[0][0]+C4m[1][1]+C4m[2][2]+C4m[3][3]+C4m[4][4]+C4m[5][5]+C4m[6][6]+C4m[7][7]) << endl;
   
-      // Fourier transform rho
-      fft->fftn(rho,rho,nn,2,1);
-
-      // then compute A^+
-      for (int i=0; i<nn[0]; i++)
-	{
-	  for (int j=0; j<nn[1]; j++)
-	    {
-	      pos = i*nn[1]+j;
-	      kx = 2.*param->PI*(-0.5+static_cast<double>(i)/static_cast<double>(nn[0]));
-	      ky = 2.*param->PI*(-0.5+static_cast<double>(j)/static_cast<double>(nn[1]));
-	      //kt2 = kx*kx+ky*ky;
-	      kt2 = 2.*sqrt(sin(kx/2.)*sin(kx/2.)+sin(ky/2.)*sin(ky/2.))*2.*sqrt(sin(kx/2.)*sin(kx/2.)+sin(ky/2.)*sin(ky/2.)); //lattice momentum
-	      if (kt2!=0)
-		*rho[pos] = *rho[pos]*(1./kt2); // rho contains A to save memory
-	      else 
-		*rho[pos] = *rho[pos]*(0.); // rho contains A to save memory
-	    }
-	}
-      
-      // Fourier transform back A^+
-      fft->fftn(rho,rho,nn,2,-1);
-	
-      // A is saved in rho now.
-      
-      // compute U
-      
-      for (int i=0; i<nn[0]; i++)
-	{
-	  for (int j=0; j<nn[1]; j++)
-	    {
-	      pos = i*nn[1]+j;
-	      //multiply by -i:
-	      for(int nc=0; nc<Nc*Nc; nc++)
-		{
-		  temp3 = rho[pos]->getRe(nc); // rho contains A!
-		  rho[pos]->setRe(nc,rho[pos]->getIm(nc));
-		  rho[pos]->setIm(nc,-temp3);
-		}
-	      temp2 = *rho[pos]*g; //   here rho is prop to g\mu, so we need another g here (unlike in initU2)
-	      //cout << temp2 << endl;
-	      temp2.expm();
-	      temp = temp2 * lat->cells[pos]->getU();
-	      //temp = (unit-*A[pos]) * lat->cells[pos]->getU();
-	      // set U
-	      lat->cells[pos]->setU(temp);
-	      lat->cells[pos]->setUi(temp);
-	    }
-	}
-        
-      //      UD=lat->cells[pos]->getU();
-      //UD.conjg();
-
-      for(int i=0; i<param->getSize()*param->getSize(); i++)
-	{
-	  delete rho[i];
-	}
-      
-      delete[] rho;
+  for(int k=0; k<Ny; k++)
+  {
+    rejections=0;
+    rho = new Matrix*[nn[0]*nn[1]];
+    rhoa = new double**[nn[0]*nn[1]];
+    
+    for(int i=0; i<param->getSize()*param->getSize(); i++)
+    {
+      rho[i] = new Matrix(param->getNc(),0.);
+      rhoa[i] = new double*[Nc2m1];
     }
-
-
-   // done. 
-
+    
+    for(int i=0; i<param->getSize()*param->getSize(); i++)
+    {
+      for(int n=0; n<Nc2m1; n++)
+      {
+        rhoa[i][n] = new double;
+      }
+    }
+    
+    S4avg=0.;
+    
+    for (int i=0; i<nn[0]; i++)
+    {
+      for (int j=0; j<nn[1]; j++)
+      {
+        pos = i*nn[1]+j;
+        accepted=0;
+        SG=0.;
+        S4=0.;
+        while(accepted==0)
+        {
+          SG=0.;
+          S4=0.;
+          for(int n=0; n<Nc2m1; n++)
+          {
+            *rhoa[pos][n] = mu*g*random->Gauss()/sqrt(static_cast<double>(Ny)); // generate Gaussian random number
+          }
+          // compute Gaussian action and the quartic part of the action
+          for(int a=0; a<Nc2m1; a++)
+          {
+            SG += (*rhoa[pos][a])*(*rhoa[pos][a])/2./g/g/mu/mu;
+            for(int b=0; b<Nc2m1; b++)
+            {
+              S4 += 3./kappa4*(*rhoa[pos][a])*(*rhoa[pos][a])*(*rhoa[pos][b])*(*rhoa[pos][b]);
+            }
+          }
+          // 		  cout << "cell " << pos << endl;
+          //		  cout << "SG=" << SG << endl;
+          // 		  cout << "S4=" << S4 << endl;
+          // 		  cout << "exp(-S4) = " << exp(-S4) << endl;
+          // 		  cout << "kappa4=" << kappa4 << endl;
+          // 		  cout << "kappa4/(mu^2)^3=" << kappa4/pow(mu,6)/pow(g,6.) << endl;
+          
+          //accept rho^a's with probability exp(-S4), otherwise reject
+          y=random->genrand64_real1();
+          if (y<exp(-S4))
+          {
+            //cout << "*kappa4/(kappa4-3.*pow(mu,4.))=" << kappa4/(kappa4-3.*pow(mu,4.)) << endl;
+            S4avg+=S4;
+            accepted=1;
+            //cout << " ***** Values at (" << i << "," << j << ") accepted with y=" << y << ", exp(-S4)=" << exp(-S4)
+            //<< ", (1-S4)=" << (1-S4) << endl;
+            
+            //cout << "SG=" << SG << endl;
+            //cout << "S4=" << S4 << endl;
+            for(int n=0; n<Nc2m1; n++)
+            {
+              *rho[pos]+=(*rhoa[pos][n])*group->getT(n);
+            }
+          }
+          else
+          {
+            //		cout << "Values at (" << i << "," << j << ") rejected with y=" << y << ", exp(-S4)=" << exp(-S4) << endl;
+            rejections+=1;
+          }
+        }
+      }
+    }
+    
+    cout << rejections << " rejections." << endl;
+    cout << "average S4=" << S4avg/nn[0]/nn[1] << endl;
+    
+    double C2[Nc2m1][Nc2m1];
+    double C4[Nc2m1][Nc2m1];
+    double C4m[Nc2m1][Nc2m1];
+    
+    for(int a=0; a<Nc2m1; a++)
+    {
+      for(int b=0; b<Nc2m1; b++)
+      {
+        C2[a][b]=0.;
+        C4[a][b]=0.;
+        C4m[a][b]=0.;
+      }
+    }
+    
+    int pos2;
+    int C4mcount=0;
+    
+    for (int i=0; i<nn[0]; i++)
+    {
+      for (int j=0; j<nn[1]; j++)
+      {
+        pos = i*nn[1]+j;
+        pos2 = (nn[0]-1-i)*nn[1]+(nn[1]-1-j);
+        for(int a=0; a<Nc2m1; a++)
+        {
+          for(int b=0; b<Nc2m1; b++)
+          {
+            //cout << i << " " << j << " " << a << " " << b << " " << (*rhoa[pos][a]) << " " << (*rhoa[pos][b]) << endl;
+            C2[a][b] += (*rhoa[pos][a])*(*rhoa[pos][b]);
+            C4[a][b] += (*rhoa[pos][a])*(*rhoa[pos][a])*(*rhoa[pos][b])*(*rhoa[pos][b]);
+            if (pos!=pos2)
+            {
+              C4m[a][b] += (*rhoa[pos][a])*(*rhoa[pos][a])*(*rhoa[pos2][b])*(*rhoa[pos2][b]);
+            }
+          }
+        }
+        C4mcount+=1;
+      }
+    }
+    
+    for(int a=0; a<Nc2m1; a++)
+    {
+      for(int b=0; b<Nc2m1; b++)
+      {
+        C2[a][b]/=(nn[0]*nn[1]);
+        C4[a][b]/=(nn[0]*nn[1]);
+        C4m[a][b]/=C4mcount;
+      }
+    }
+    cout << "mug=" << mu*g << endl;
+    cout << "fac=" << fac << endl;
+    cout << "Ny=" << Ny << endl;
+    cout << "g^2mu^2=" << g*g*mu*mu << endl;
+    cout << "kappa4=" << kappa4 << endl;
+    cout << " ------------- " << endl;
+    cout << "new g^2mu^2=" << g*g*mu*mu*(1-4.*mu*mu*mu*mu*g*g*g*g/(kappa4/3.)*(Nc*Nc+1.)) << endl;
+    cout << "avg C2[a][a]=" << 1./static_cast<double>(Nc2m1)*(C2[0][0]+C2[1][1]+C2[2][2]+C2[3][3]+C2[4][4]+C2[5][5]+C2[6][6]+C2[7][7]) << endl;
+    cout << "C2[1][1]=" << C2[1][1] << endl;
+    cout << "C2[0][1]=" << C2[0][1] << endl;
+    cout << " ------------- " << endl;
+    
+    
+    cout << "perturbative C4(0000)="
+	   << pow(g*g*mu*mu*(1-4.*mu*mu*mu*mu*g*g*g*g/(kappa4/3.)*(Nc*Nc+1)),2.)*(3*(1-8*pow(g*g*mu*mu*(1-4.*mu*mu*mu*mu*g*g*g*g/(kappa4/3.)*(Nc*Nc+1)),2.)/(kappa4/3.))) << endl;
+    cout << "C4[0][0]=" << C4[0][0] << endl;
+    cout << "perturbative C4(0011)="
+	   << pow(g*g*mu*mu*(1-4.*mu*mu*mu*mu*g*g*g*g/(kappa4/3.)*(Nc*Nc+1)),2.)*((1-8*pow(g*g*mu*mu*(1-4.*mu*mu*mu*mu*g*g*g*g/(kappa4/3.)*(Nc*Nc+1)),2.)/(kappa4/3.))) << endl;
+    cout << "C4[0][1]=" << C4[0][1] << endl;
+    cout << "C4[2][4]=" << C4[2][4] << endl;
+    cout << "perturbative C4(0x0x0u0u)="
+	   << pow(g*g*mu*mu*(1-4.*mu*mu*mu*mu*g*g*g*g/(kappa4/3.)*(Nc*Nc+1)),2.) << endl;
+    cout << "avg C4m[0][0]=" << 1./static_cast<double>(Nc2m1)*(C4m[0][0]+C4m[1][1]+C4m[2][2]+C4m[3][3]+C4m[4][4]+C4m[5][5]+C4m[6][6]+C4m[7][7]) << endl;
+    
+    // Fourier transform rho
+    fft->fftn(rho,rho,nn,2,1);
+    
+    // then compute A^+
+    for (int i=0; i<nn[0]; i++)
+    {
+      for (int j=0; j<nn[1]; j++)
+      {
+        pos = i*nn[1]+j;
+        kx = 2.*param->PI*(-0.5+static_cast<double>(i)/static_cast<double>(nn[0]));
+        ky = 2.*param->PI*(-0.5+static_cast<double>(j)/static_cast<double>(nn[1]));
+        //kt2 = kx*kx+ky*ky;
+        kt2 = 2.*sqrt(sin(kx/2.)*sin(kx/2.)+sin(ky/2.)*sin(ky/2.))*2.*sqrt(sin(kx/2.)*sin(kx/2.)+sin(ky/2.)*sin(ky/2.)); //lattice momentum
+        if (kt2!=0)
+        *rho[pos] = *rho[pos]*(1./kt2); // rho contains A to save memory
+        else
+        *rho[pos] = *rho[pos]*(0.); // rho contains A to save memory
+      }
+    }
+    
+    // Fourier transform back A^+
+    fft->fftn(rho,rho,nn,2,-1);
+    
+    // A is saved in rho now.
+    
+    // compute U
+    
+    for (int i=0; i<nn[0]; i++)
+    {
+      for (int j=0; j<nn[1]; j++)
+      {
+        pos = i*nn[1]+j;
+        //multiply by -i:
+        for(int nc=0; nc<Nc*Nc; nc++)
+        {
+          temp3 = rho[pos]->getRe(nc); // rho contains A!
+          rho[pos]->setRe(nc,rho[pos]->getIm(nc));
+          rho[pos]->setIm(nc,-temp3);
+        }
+        temp2 = *rho[pos]*g; //   here rho is prop to g\mu, so we need another g here (unlike in initU2)
+        //cout << temp2 << endl;
+        temp2.expm();
+        temp = temp2 * lat->cells[pos]->getU();
+        //temp = (unit-*A[pos]) * lat->cells[pos]->getU();
+        // set U
+        lat->cells[pos]->setU(temp);
+        lat->cells[pos]->setUi(temp);
+      }
+    }
+    
+    //      UD=lat->cells[pos]->getU();
+    //UD.conjg();
+    
+    for(int i=0; i<param->getSize()*param->getSize(); i++)
+    {
+      delete rho[i];
+    }
+    
+    delete[] rho;
+  }
+  
+  
+  // done. 
+  
   // -----------------------------------------------------------------------------
   // finish
   // -----------------------------------------------------------------------------
-
+  
 }
 
 // MV initial conditions with quartic term in the action and correlations in x^-

@@ -1,24 +1,27 @@
 mode 1
 Nc 3
 runningCoupling 0
-size 128
-steps 71
-ds 0.001
-measureSteps 70
+size 256
+steps 250
+ds 0.0004
+measureSteps 25 
 initMethod 10
-input_wline ic/128/round_0
+input_wline protons/bp_3.0_bq_0.3_m_0.4_noqsfluct/V-31.txt 
+output_dir protons/bp_3.0_bq_0.3_m_0.4_noqsfluct/
 R 10.
 g2mua 1.
 Lambda_QCD 0.075
-kappa4Factor 0
+kappa4Factor 1
 g 1.
-m 0.2
-L 1.
+m 0.4
+L 5.12
 Ny 100
 mu0 0.225
 seed 1
+suppress_m_lqcd 0.25
 EndOfFile
 
+#output_dir protons/bp_3.0_bq_0.3_mlqcd_0.25/
 
 # mode 1
 # Nc 3

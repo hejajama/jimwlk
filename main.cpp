@@ -25,6 +25,21 @@ using namespace std;
 
 int readInput(Setup *setup, Parameters *param, int argc, char *argv[]);
 
+void split(const string &s, char delim, vector<string> &elems) {
+  stringstream ss(s);
+  string item;
+  while (getline(ss, item, delim)) {
+    elems.push_back(item);
+  }
+}
+
+
+vector<string> split(const string &s, char delim) {
+  vector<string> elems;
+  split(s, delim, elems);
+  return elems;
+}
+
 // main program
 int main(int argc, char *argv[])
 {
@@ -195,6 +210,9 @@ int main(int argc, char *argv[])
       x = lat->cells[pos]->getX();
       y = lat->cells[pos]->getY();
       
+      
+      
+      
       r2 = x*x+y*y;
       // K is a 2d vector (x and y)
       if (r2==0)
@@ -218,20 +236,32 @@ int main(int argc, char *argv[])
           double tmpk1 =cos(Pi*y)*(sin(2.*Pi*x)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)))/nn[0];
           double tmpk2 = cos(Pi*x)*(sin(2.*Pi*y)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)))/nn[0];
           
-          if (m>0)
+          if (param->getSuppressM()>0)
           {
             // Regulate
             // Note that we use here r2 which is not in lattice units
             // because m is in GeV
+            double length = param->getL();
+            double phys_x = x*length; //in fm
+            double phys_y = y*length;
+            double fmgev = 5.068;
+            double bessel_argument = sqrt(phys_x*phys_x + phys_y*phys_y)*m*fmgev;
+            // r is in fm, m is in GeV, multiply by 5!
+            
+            //double bessel_argument = param->getSuppressM()*sqrt(r2*Lambda2*param->getg2mu()*param->getg2mu()); //physical_r*m
+            // original
+            //double bessel_argument = sqrt(r2)*m;
+            
             gsl_sf_result bes;
-            int status = gsl_sf_bessel_K1_e(sqrt(r2)*m, &bes);
+            int status = gsl_sf_bessel_K1_e(bessel_argument, &bes);
             if (status)
             {
-              cerr << "Bessel function error! argument " << sqrt(r2)*m << endl;
+              cerr << "Bessel function error! argument " << bessel_argument << endl;
               exit(1);
             }
-            tmpk1 *= sqrt(r2)*m*bes.val;
-            tmpk2 *= sqrt(r2)*m*bes.val;
+            tmpk1 *= bessel_argument*bes.val;
+            tmpk2 *= bessel_argument*bes.val;
+            //cout << physical_x << " " << physical_y << " " << bessel_argument*bes.val << endl;
           }
           
           
@@ -631,16 +661,21 @@ int main(int argc, char *argv[])
     //cout << " done with step" << endl;
     
     // Save intermediate step Wlines
-    if (ids%10==0)
-    {
-      stringstream fname; fname << "wline_evolution/step_" << ids;
-      lat->PrintWilsonLines(fname.str());
-    }
+    //if (ids%10==0)
+    //{
+    //  stringstream fname; fname << "wline_evolution/step_" << ids;
+    //  lat->PrintWilsonLines(fname.str());
+   // }
     
     // measure quantities
     if ((ids)%param->getMeasureSteps()==0)
     {
       cout << "measuring ... " << endl;
+      stringstream fname;
+      vector<string> inputname =split(param->getInputWline(),'/');
+      
+      fname << param->getOutputDir() << "/" << inputname[inputname.size()-1] << "_steps_" << ids;
+      lat->PrintWilsonLines(fname.str());
       //measure->dipoleOperator(param,lat,ids);
       measure->TwoDCorrelator(param, lat, ids);
       //measure->fourPointFunction(param, lat, ids);
@@ -714,11 +749,23 @@ int readInput(Setup *setup, Parameters *param, int argc, char *argv[])
   // the first given argument is taken to be the input file name
   // if none is given, that file name is "input"
   cout << "Opening input file ... " << endl;
-  const char* file_name;
+  bool ic_cli=false;  // true if initial condition file is a cli argument
+  string file_name="input";
+  if (argc > 1)
+  {
+    if (string(argv[1])=="-ic")
+    {
+      ic_cli = true;
+      param->setInputWline(argv[2]);
+    }
+  }
   if (argc>1)
   {
-    file_name = argv[1];
-    cout << "Using file name \"" << file_name << "\"." << endl;
+    if (string(argv[1])!="-ic")
+    {
+      file_name = argv[1];
+      cout << "Using file name \"" << file_name << "\"." << endl;
+    }
   }
   else
   {
@@ -728,25 +775,28 @@ int readInput(Setup *setup, Parameters *param, int argc, char *argv[])
   
   // read and set all the parameters in the "param" object of class "Parameters"
   cout << "Reading parameters from file ... ";
-  param->setMode(setup->IFind(file_name,"mode"));
-  param->setInitMethod(setup->IFind(file_name,"initMethod"));
-  param->setRunningCoupling(setup->IFind(file_name,"runningCoupling"));
-  param->setg2mu(setup->DFind(file_name,"g2mua")); // g^2mu times a
-  param->setLambdaQCD(setup->DFind(file_name,"Lambda_QCD")); // in units of g^2mu
-  param->setR(setup->DFind(file_name,"R"));
-  param->setDs(setup->DFind(file_name,"ds"));
-  param->setSize(setup->IFind(file_name,"size"));
-  param->setNc(setup->IFind(file_name,"Nc"));
-  param->setSeed(setup->IFind(file_name,"seed"));
-  param->setNy(setup->IFind(file_name,"Ny"));
-  param->setSteps(setup->IFind(file_name,"steps"));
-  param->setMeasureSteps(setup->IFind(file_name,"measureSteps"));
-  param->setMu0(setup->DFind(file_name,"mu0"));
-  param->setg(setup->DFind(file_name,"g"));
-  param->setkappa4Factor(setup->DFind(file_name,"kappa4Factor"));
-  param->setm(setup->DFind(file_name,"m"));
-  param->setL(setup->DFind(file_name,"L"));
-  param->setInputWline(setup->StringFind(file_name, "input_wline"));
+  param->setMode(setup->IFind(file_name.c_str(),"mode"));
+  param->setInitMethod(setup->IFind(file_name.c_str(),"initMethod"));
+  param->setRunningCoupling(setup->IFind(file_name.c_str(),"runningCoupling"));
+  param->setg2mu(setup->DFind(file_name.c_str(),"g2mua")); // g^2mu times a
+  param->setLambdaQCD(setup->DFind(file_name.c_str(),"Lambda_QCD")); // in units of g^2mu
+  param->setR(setup->DFind(file_name.c_str(),"R"));
+  param->setDs(setup->DFind(file_name.c_str(),"ds"));
+  param->setSize(setup->IFind(file_name.c_str(),"size"));
+  param->setNc(setup->IFind(file_name.c_str(),"Nc"));
+  param->setSeed(setup->IFind(file_name.c_str(),"seed"));
+  param->setNy(setup->IFind(file_name.c_str(),"Ny"));
+  param->setSteps(setup->IFind(file_name.c_str(),"steps"));
+  param->setMeasureSteps(setup->IFind(file_name.c_str(),"measureSteps"));
+  param->setMu0(setup->DFind(file_name.c_str(),"mu0"));
+  param->setg(setup->DFind(file_name.c_str(),"g"));
+  param->setkappa4Factor(setup->DFind(file_name.c_str(),"kappa4Factor"));
+  param->setm(setup->DFind(file_name.c_str(),"m"));
+  param->setL(setup->DFind(file_name.c_str(),"L"));
+  if (!ic_cli)
+    param->setInputWline(setup->StringFind(file_name.c_str(), "input_wline"));
+  param->setSuppressM(setup->DFind(file_name.c_str(), "suppress_m_lqcd"));
+  param->setOutputDir(setup->StringFind(file_name.c_str(), "output_dir"));
   
   // write the used parameters into file "usedParameters.dat" as a double check for later
   time_t rawtime;
