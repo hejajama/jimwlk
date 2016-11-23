@@ -224,6 +224,30 @@ int main(int argc, char *argv[])
       }
       else
       {
+        double mass_regulator = 1.0;  // if m suppresses long distance tails,
+        // K is multiplied by this, which is m*r*K_1(m*r)
+        if (m>0)
+        {
+          // Regulate
+          // Note that we use here r2 which is not in lattice units
+          // because m is in GeV
+          double length = param->getL();
+          double phys_x = x*length; //in fm
+          double phys_y = y*length;
+          double fmgev = 5.068;
+          double bessel_argument = sqrt(phys_x*phys_x + phys_y*phys_y)*m*fmgev;
+          // r is in fm, m is in GeV, multiply by 5!
+          
+          gsl_sf_result bes;
+          int status = gsl_sf_bessel_K1_e(bessel_argument, &bes);
+          if (status)
+          {
+            cerr << "Bessel function error! argument " << bessel_argument << endl;
+            exit(1);
+          }
+          mass_regulator = bessel_argument * bes.val;
+
+        }
         if (param->getRunningCoupling() == 0)
         {
           // 	  K[pos]->push_back(x/r2);
@@ -236,34 +260,11 @@ int main(int argc, char *argv[])
           double tmpk1 =cos(Pi*y)*(sin(2.*Pi*x)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)))/nn[0];
           double tmpk2 = cos(Pi*x)*(sin(2.*Pi*y)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)))/nn[0];
           
-          if (param->getSuppressM()>0)
-          {
-            // Regulate
-            // Note that we use here r2 which is not in lattice units
-            // because m is in GeV
-            double length = param->getL();
-            double phys_x = x*length; //in fm
-            double phys_y = y*length;
-            double fmgev = 5.068;
-            double bessel_argument = sqrt(phys_x*phys_x + phys_y*phys_y)*m*fmgev;
-            // r is in fm, m is in GeV, multiply by 5!
-            
-            //double bessel_argument = param->getSuppressM()*sqrt(r2*Lambda2*param->getg2mu()*param->getg2mu()); //physical_r*m
-            // original
-            //double bessel_argument = sqrt(r2)*m;
-            
-            gsl_sf_result bes;
-            int status = gsl_sf_bessel_K1_e(bessel_argument, &bes);
-            if (status)
-            {
-              cerr << "Bessel function error! argument " << bessel_argument << endl;
-              exit(1);
-            }
-            tmpk1 *= bessel_argument*bes.val;
-            tmpk2 *= bessel_argument*bes.val;
-            //cout << physical_x << " " << physical_y << " " << bessel_argument*bes.val << endl;
-          }
           
+          // Regulate long distance tails, does nothing if m=0
+          tmpk1 *= mass_regulator;
+          tmpk2 *= mass_regulator;
+        
           
           K[pos]->push_back(tmpk1);
           K[pos]->push_back(tmpk2);
@@ -286,8 +287,8 @@ int main(int argc, char *argv[])
           // discretization without singularities
           x/=nn[0];
           y/=nn[1];
-          K[pos]->push_back(sqrt(alphas)*(cos(Pi*y)*(sin(2.*Pi*x)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.))))/nn[0]);
-          K[pos]->push_back(sqrt(alphas)*(cos(Pi*x)*(sin(2.*Pi*y)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.))))/nn[0]);
+          K[pos]->push_back(sqrt(alphas)*(cos(Pi*y)*(sin(2.*Pi*x)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.))))/nn[0] * mass_regulator);
+          K[pos]->push_back(sqrt(alphas)*(cos(Pi*x)*(sin(2.*Pi*y)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.))))/nn[0] * mass_regulator);
           // S is a 1d vector
           S[pos]->push_back(alphas*(pow( cos(Pi*y) ,2.)*pow( sin(2.*Pi*x)/(2.*Pi) ,2.)+pow( cos(Pi*x) ,4.)*pow( sin(2.*Pi*y)/(2.*Pi) ,2.))
                             /pow( (pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)) ,2.)/nn[0]/nn[0]);
@@ -449,15 +450,15 @@ int main(int argc, char *argv[])
   Matrix M(param->getNc(),0.);
   
   // measure quantities
-  cout << "measuring ... " << endl;
+  //cout << "measuring ... " << endl;
   //measure->dipoleOperator(param,lat,0);
-  measure->TwoDCorrelator(param, lat, 0);
+  //measure->TwoDCorrelator(param, lat, 0);
   //measure->fourPointFunction(param, lat, 0);
-  cout << "Measure: twoPointFunctionInK..." << endl;
-  measure->twoPointFunctionInK(param,lat,0);
+  //cout << "Measure: twoPointFunctionInK..." << endl;
+  //measure->twoPointFunctionInK(param,lat,0);
   
-  cout << "storing U in Uy[" << 0 << "] ... " << endl;
-  measure->storeU(param, lat, 0);
+  //cout << "storing U in Uy[" << 0 << "] ... " << endl;
+  //measure->storeU(param, lat, 0);
   
   //cout << "Measure: fourPointFunctionInK..." << endl;
   //measure->fourPointFunctionInK(param,lat,0);
@@ -670,23 +671,24 @@ int main(int argc, char *argv[])
     // measure quantities
     if ((ids)%param->getMeasureSteps()==0)
     {
-      cout << "measuring ... " << endl;
+      //cout << "measuring ... " << endl;
       stringstream fname;
       vector<string> inputname =split(param->getInputWline(),'/');
       
       fname << param->getOutputDir() << "/" << inputname[inputname.size()-1] << "_steps_" << ids;
       lat->PrintWilsonLines(fname.str());
       //measure->dipoleOperator(param,lat,ids);
-      measure->TwoDCorrelator(param, lat, ids);
+      //measure->TwoDCorrelator(param, lat, ids);
       //measure->fourPointFunction(param, lat, ids);
-      cout << "Measure: twoPointFunctionInK..." << endl;
-      measure->twoPointFunctionInK(param,lat,ids);
+      //cout << "Measure: twoPointFunctionInK..." << endl;
+      //measure->twoPointFunctionInK(param,lat,ids);
+      /*
       if (ids%(param->getMeasureSteps()*5)==0 && ids/(param->getMeasureSteps()*5)<10)
       {
         cout << "storing U in Uy[" << ids/(param->getMeasureSteps()*5) << "] ... " << endl;
         measure->storeU(param, lat, ids/(param->getMeasureSteps()*5));
         //cout << "Uy=" << lat->cells[25]->getUy(1) << ", U=" << lat->cells[25]->getU()<< endl; //check
-      }
+      }*/
       //  cout << "Measure: fourPointFunctionInK..." << endl;
       // measure->fourPointFunctionInK(param,lat,ids);
       

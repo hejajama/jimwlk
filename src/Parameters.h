@@ -44,11 +44,12 @@ class Parameters
   // constructor:
   Parameters() 
     {
+      PI = 3.141592654;
+      hbarc = 0.1973269631;
     }
 
-  const double PI = 3.141592654;
-  const double hbarc = 0.1973269631;
-  // functions to access the private variables:
+   double PI;
+  double hbarc;   // functions to access the private variables:
   void setSeed(int x) {seed=x;}
   int getSeed() {return seed;}
   void setNc(int x) {Nc=x;}

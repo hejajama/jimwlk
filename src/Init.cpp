@@ -1877,7 +1877,7 @@ void Init::initFromData(Lattice *lat, Group *group, Parameters *param, Random *r
   cout << "Reading initial condition from file " << param->getInputWline() << endl;
   
     // TODO: should check that parameters are consistent with the datafile, now assuming it
-  ifstream input(param->getInputWline());
+  ifstream input(param->getInputWline().c_str());
   int size=param->getSize();
   //cout << "Reading " << size << " lines..." << endl;
   int i=0;
