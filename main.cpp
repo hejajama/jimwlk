@@ -8,6 +8,7 @@
 #include <vector>
 #include <sstream>
 #include <gsl/gsl_sf_bessel.h>
+#include <gsl/gsl_errno.h>
 
 #include "Setup.h"
 #include "Init.h"
@@ -239,19 +240,21 @@ int main(int argc, char *argv[])
           // r is in fm, m is in GeV, multiply by 5!
           
           gsl_sf_result bes;
+          gsl_set_error_handler_off(); // so that when we have too large
+          // argument, we can handle error ourselves and set regulator to 0
           int status = gsl_sf_bessel_K1_e(bessel_argument, &bes);
           if (status)
           {
-            cerr << "Bessel function error! argument " << bessel_argument << endl;
-            exit(1);
+            mass_regulator = 0;
           }
-          mass_regulator = bessel_argument * bes.val;
+          else
+            mass_regulator = bessel_argument * bes.val;
 
         }
         if (param->getRunningCoupling() == 0)
         {
           // 	  K[pos]->push_back(x/r2);
-          // 		  K[pos]->push_back(y/r2);
+          // 		  K[pos]->push_back(y/r2);`
           // 		  // S is a 1d vector
           // 		  S[pos]->push_back(1./r2);
           x/=nn[0];
