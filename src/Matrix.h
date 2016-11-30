@@ -16,7 +16,8 @@ class Matrix
 private:
     int ndim;
     int nn;
-    complex<double>* e;
+    //complex<double>* e;
+    vector<complex<double> > e;
 
 public:
     
@@ -27,7 +28,15 @@ public:
     //destructor
     ~Matrix()
       {
-	delete[] e;
+          /*
+        if (e != NULL)
+        {
+          delete[] e;
+          e = NULL;
+        }
+        else
+            cerr << "Warning, tried to delete memory twice!" << endl;
+           */
       }
 
     void setRe(int i, double a) {e[i]=complex<double>(a,e[i].imag());};
