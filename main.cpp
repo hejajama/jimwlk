@@ -127,7 +127,7 @@ int main(int argc, char *argv[])
   }
   
   // Save initial state Wilson lines
-  lat->PrintWilsonLines("wline_evolution/step_0");
+  //lat->PrintWilsonLines("wline_evolution/step_0");
   
   // allocate memory
   complex<double> ** xi;

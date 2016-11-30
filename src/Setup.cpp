@@ -14,9 +14,9 @@ char *Setup::StringFind(const char* file_name, const char *st)
 {
   // char* s = new char[80];
   // char* x = new char[80];
-  char* s = new char[80];
-  char* x = new char[80];
-  memset(s,1,79); 
+  char* s = new char[180];
+  char* x = new char[180];
+  memset(s,1,179);
  
   FILE *input, *tmp_file;
   int ind, check;
@@ -70,8 +70,8 @@ char *Setup::StringFind(const char* file_name, const char *st)
 double Setup::DFind(const char *file_name, const char *st)
 {
   char *s;
-  s = new char[80];
-  memset(s,1,79); 
+  s = new char[180];
+  memset(s,1,179);
  
   double x;
   
@@ -96,7 +96,7 @@ int Setup::IsFile(const char *file_name)
 {
   static int isf;
   static int ind = 0;
-  char st[80];
+  char st[180];
   FILE *temp;
   
   if( (temp = fopen(file_name,"r")) == NULL) return 0;
