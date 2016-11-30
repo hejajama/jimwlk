@@ -6,9 +6,7 @@ Matrix::Matrix(int n)
 {
   ndim = n;
   nn = ndim*ndim;
-  //e = new complex<double> [nn];
-  //for(int i=0; i<nn; i++) e[i] = complex<double>(0.0,0.0);
-    for(int i=0; i<nn; i++) e.push_back(complex<double>(0.0,0.0));
+  for(int i=0; i<nn; i++) e.push_back(complex<double>(0.0,0.0));
 }
 
 //constructor if value for a and dimensions are given (a is the real value on the diagonal)
@@ -16,18 +14,8 @@ Matrix::Matrix(int n, double a)
 {
   ndim = n;
   nn = ndim*ndim;
-  //e = new complex<double> [nn];
-    for(int i=0; i<nn; i++) e.push_back(complex<double>(0.0,0.0));
-    /*
-  if(e==0) 
-    {
-      cout << "Matrix: cannot allocate memory (matrix:) e= " << e << endl;
-      abort();
-    }*/
-  
-  //for(int i=0; i<nn; i++) e[i] = complex<double>(0.0,0.0);
-    
-   for(int i=0; i<ndim; i++) e[i*ndim+i] = complex<double>(a,0.0);
+  for(int i=0; i<nn; i++) e.push_back(complex<double>(0.0,0.0));
+  for(int i=0; i<ndim; i++) e[i*ndim+i] = complex<double>(a,0.0);
 }
 
 
