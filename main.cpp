@@ -233,8 +233,8 @@ int main(int argc, char *argv[])
           // Note that we use here r2 which is not in lattice units
           // because m is in GeV
           double length = param->getL();
-          double phys_x = x*length; //in fm
-          double phys_y = y*length;
+          double phys_x = x/nn[0]*length; //in fm
+          double phys_y = y/nn[1]*length;
           double fmgev = 5.068;
           double bessel_argument = sqrt(phys_x*phys_x + phys_y*phys_y)*m*fmgev;
           // r is in fm, m is in GeV, multiply by 5!
