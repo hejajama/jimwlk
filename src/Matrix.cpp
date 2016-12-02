@@ -60,6 +60,7 @@ Matrix operator * (const Matrix& a, const Matrix& b)
   else
     {
       cout << "[Matrix::operator *]: Matrix product is only defined for 2x2, 3x3, and 8x8 matrixes. You gave me " << n << "x" << n << ". Exiting." << endl;
+        exit(1);
     }
 }
 

@@ -245,7 +245,8 @@ int main(int argc, char *argv[])
           int status = gsl_sf_bessel_K1_e(bessel_argument, &bes);
           if (status)
           {
-            mass_regulator = 0;
+            // Too large argument, so x*BesselK[1,x]=0
+            mass_regulator = 0.0;
           }
           else
             mass_regulator = bessel_argument * bes.val;
@@ -800,7 +801,6 @@ int readInput(Setup *setup, Parameters *param, int argc, char *argv[])
   param->setL(setup->DFind(file_name.c_str(),"L"));
   if (!ic_cli)
     param->setInputWline(setup->StringFind(file_name.c_str(), "input_wline"));
-  param->setSuppressM(setup->DFind(file_name.c_str(), "suppress_m_lqcd"));
   param->setOutputDir(setup->StringFind(file_name.c_str(), "output_dir"));
   
   // write the used parameters into file "usedParameters.dat" as a double check for later

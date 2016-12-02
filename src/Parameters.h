@@ -34,7 +34,6 @@ class Parameters
   double g; // coupling g needed in the initU3 where g^2mu does not scale out
   double kappa4Factor; // factor that multiplies the ratio of kappa4/(g^2 mu^2)^3
   double m;     // mass term to regulate infrared divergence (of order Lambda_QCD)
-  double suppress_m_lqcd;  // mass term to suppress Coulomb tails in evolution, in units of LambdaQCD
   double L;     // length in fm of the lattice - needed when including mass regulator - new scale
   string input_wline; // filename containing Wilson lines used as an input - note that size and NC should match!
   string output_dir;  // Directory where to save intermediate Wilson lines
@@ -84,8 +83,6 @@ class Parameters
   double getkappa4Factor() {return kappa4Factor;}
   void setm(double x) {m=x;}
   double getm() {return m;}
-  void setSuppressM(double sm) { suppress_m_lqcd = sm; }
-  double getSuppressM() { return suppress_m_lqcd; }
   void setL(double x) {L=x;}
   double getL() {return L;}
   void setInputWline(string f){ input_wline = f; }
