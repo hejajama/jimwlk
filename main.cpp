@@ -200,7 +200,7 @@ int main(int argc, char *argv[])
   double alphas;
   Lambda2 = param->getLambdaQCD()*param->getLambdaQCD();///(2.*param->PI*2.*param->PI);
   cout << "in this version Lambda_QCD is the coordinate space Lambda!" << endl;
-  cout << "Lambda^2/g^4mu^2=" << Lambda2 << endl;
+  cout << "Lambda^2=" << Lambda2 << endl;
   double mu0 = param->getMu0();
   for (int i=0; i<nn[0]; i++)
   {
@@ -280,8 +280,16 @@ int main(int argc, char *argv[])
         else if (param->getRunningCoupling() == 1)
         {
           double c=0.2;
+          double length = param->getL();
+          double phys_x = x/nn[0]*length; //in fm
+          double phys_y = y/nn[1]*length;
+          double fmgev = 5.068;
+          double phys_r2 = phys_x*phys_x + phys_y*phys_y;
+          
+          // Alphas in physical units! Lambda2 is lambda_QCD^2 in GeV
+          
           alphas = 4.*param->PI
-          /((11*param->getNc()-2*Nf)/3.*log(pow((pow(mu0*mu0/Lambda2,1./c)+pow(4./(r2*Lambda2*param->getg2mu()*param->getg2mu()),1./c)),c)));
+          /((11.0*param->getNc()-2.0*Nf)/3.*log(pow((pow(mu0*mu0/Lambda2,1./c)+pow(4./(phys_r2*Lambda2*fmgev*fmgev),1./c)),c)));
           
           // K[pos]->push_back(sqrt(alphas)*x/r2);
           // 		  K[pos]->push_back(sqrt(alphas)*y/r2);
