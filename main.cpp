@@ -103,7 +103,7 @@ int main(int argc, char *argv[])
   //initialize random generator
   long long rnum;
   rnum=time(0)+param->getSeed();
-  //rnum = 1;
+  rnum = 1;
   cout << "Random seed =" << rnum << " made from time "
   << rnum-param->getSeed() << " and argument "
   << param->getSeed() << endl;
@@ -168,7 +168,10 @@ int main(int argc, char *argv[])
     CKxi[i] = new complex<double>[Nc2m1];
   }
   
+  
   // C(K,U^{ab} xi^a), vector in a (color)
+  // H.M. disable
+  /*
   complex<double> ** CKUxi;
   CKUxi = new complex<double> *[param->getSize()*param->getSize()];
   
@@ -192,6 +195,19 @@ int main(int argc, char *argv[])
   {
     UA2[i] = new Matrix(Nc2m1,0);
   }
+  */
+  
+  // H.M. matrix V xsi V^\dagger
+  Matrix ** VxsiVx;
+  VxsiVx = new Matrix *[param->getSize()*param->getSize()];
+  Matrix ** VxsiVy;
+  VxsiVy = new Matrix *[param->getSize()*param->getSize()];
+  for(int i=0; i<param->getSize()*param->getSize(); i++)
+  {
+    VxsiVx[i] = new Matrix(param->getNc(),0);
+    VxsiVy[i] = new Matrix(param->getNc(),0);
+  }
+  
   
   double m = param->getm();
   double Pi = param->PI;
@@ -236,8 +252,20 @@ int main(int argc, char *argv[])
           double phys_x = x/nn[0]*length; //in fm
           double phys_y = y/nn[1]*length;
           double fmgev = 5.068;
-          double bessel_argument = sqrt(phys_x*phys_x + phys_y*phys_y)*m*fmgev;
+          double mr_physical = sqrt(phys_x*phys_x + phys_y*phys_y)*m*fmgev;
           // r is in fm, m is in GeV, multiply by 5!
+          
+          // Lattice units
+          // Here x is [-N/2, N/2]
+          double lat_x = sin(M_PI*x/nn[0])/(M_PI);
+          double lat_y = sin(M_PI*y/nn[1])/(M_PI);
+          // lat_x and lat_y are now in [-1/2,1/2] as x/nn[0] is in [-N/2, N/2]
+          double lat_r = sqrt(lat_x*lat_x + lat_y*lat_y) * nn[0];
+          // lat_r now tells how many lattice units the distance is
+          double a = length / nn[0];
+          double lat_m = m * a * fmgev;
+          double bessel_argument = lat_m * lat_r;
+          
           
           gsl_sf_result bes;
           gsl_set_error_handler_off(); // so that when we have too large
@@ -273,8 +301,8 @@ int main(int argc, char *argv[])
           K[pos]->push_back(tmpk1);
           K[pos]->push_back(tmpk2);
           // S is a 1d vector
-          S[pos]->push_back((pow( cos(Pi*y) ,2.)*pow( sin(2.*Pi*x)/(2.*Pi) ,2.)+pow( cos(Pi*x) ,4.)*pow( sin(2.*Pi*y)/(2.*Pi) ,2.))
-                            /pow( (pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)) ,2.)/nn[0]/nn[0]);
+          S[pos]->push_back((pow( cos(Pi*y) ,2.)*pow( sin(2.*Pi*x)/(2.*Pi) ,2.)+pow( cos(Pi*x) ,2.)*pow( sin(2.*Pi*y)/(2.*Pi) ,2.))
+                            /pow( (pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)) ,2.)/nn[0]/nn[0] * mass_regulator * mass_regulator);
           
         }
         else if (param->getRunningCoupling() == 1)
@@ -501,8 +529,9 @@ int main(int argc, char *argv[])
     //cout << "step " << ids << endl;
     for (int i=0; i<cells; i++)
     {
-      lat->cells[i]->computeAdjointU();
-      *UA2[i] = lat->cells[i]->getUA();
+      // H.M. disable
+      //lat->cells[i]->computeAdjointU();
+      //*UA2[i] = lat->cells[i]->getUA();
       
       // generate random Gaussian noise in every cell for Nc^2-1 color components and 2 spatial components x and y
       for (int n=0; n<Nc2m1*2; n++)
@@ -527,7 +556,8 @@ int main(int argc, char *argv[])
       
       // now compute the product \tilde(U)^{ab} xi_i^b
       // replace local xi by \tilde(U)^{ab} xi_i^b (do this to save memory)
-      
+      //H.M. disable
+      /*
       for (int a=0; a<Nc2m1; a++)
       {
         xi[i][0*Nc2m1+a] = 0.;
@@ -539,8 +569,10 @@ int main(int argc, char *argv[])
           xi[i][1*Nc2m1+a] += (*UA2[i]).get(a,b)*xi2[i][1*Nc2m1+b];
         }
       }
+       */
     }
     //cout << "CKxi done" << endl;
+    
     
     fft->fftnArray(CKxi,CKxi,nn,2,-1,Nc2m1);
     //cout << "CKxi fft done" << endl;
@@ -552,11 +584,14 @@ int main(int argc, char *argv[])
     //cout << "Uxi set" << endl;
     
     // FFT of UA*xi
-    fft->fftnArray(xi,xi,nn,2,1,2*Nc2m1); // remember xi contains UA times xi now
+    // H.M. disable
+    //fft->fftnArray(xi,xi,nn,2,1,2*Nc2m1); // remember xi contains UA times xi now
     //cout << "Uxi fft done" << endl;
     
     // now compute C(K_i,U^{ab} xi_i^a) == F^{-1}(F(K_i)F(U^{ab} xi_i^a)) = F^{-1}(F(K_x)F(U^{ab} xi_x^a)+(F(K_y)F(U^{ab} xi_y^a))
     
+    // H.M. disable
+    /*
     for (int i=0; i<cells; i++)
     {
       for (int n=0; n<Nc2m1; n++)
@@ -567,6 +602,7 @@ int main(int argc, char *argv[])
     //cout << "CKUxi set" << endl;
     
     fft->fftnArray(CKUxi,CKUxi,nn,2,-1,Nc2m1);
+     */
     //cout << "CKUxi fft done" << endl;
     
     // now CKUxi contains C(K_i,U^{ab} xi_i^a) - it is a vector with a components
@@ -574,6 +610,10 @@ int main(int argc, char *argv[])
     
     // now take \tilde{U}^\dag times CKUxi
     // replace local xi by \tilde(U^\dag)^{ac} \tilde(U)^{cb} xi_i^b (do this to save memory)
+    
+    // H.M.
+    // Disable: keep CKxi[i][a] as  C(K_i,xi_i^a)
+    /*
     for (int i=0; i<cells; i++)
     {
       UAD = *UA2[i];
@@ -591,7 +631,12 @@ int main(int argc, char *argv[])
         CKxi[i][a] -= xi[i][a];
       }
     }
+     */
     //cout << "Udag CKUxi set" << endl;
+    // C(K_i, V xi_i^a V^\dagger) == F^{-1}(F(K_i)F(xi_i^a)) = F^{-1}(F(K_x)F(xi_x^a)+F(K_y)F(xi_y^a))
+    
+    
+    
     
     //cout << "omega1 done" << endl;
     
@@ -601,11 +646,14 @@ int main(int argc, char *argv[])
     // compute Fourier transform of \tilde{U}^{ab}
     
     // compute Fourier transform of UA
-    fft->fftn(UA2,UA,nn,2,1);
+    // H.M. disable
+    //fft->fftn(UA2,UA,nn,2,1);
     
     //cout << "UA fft done" << endl;
     
     // multiply by S
+    // H.M. disable
+    /*
     for (int i=0; i<cells; i++)
     {
       *UA[i] = (*S[i])[0]*(*UA[i]);
@@ -613,11 +661,14 @@ int main(int argc, char *argv[])
     
     // FFT back
     fft->fftn(UA,UA,nn,2,-1);
+     */
     // now UA contains the convolution of S with UA
     
     //cout << "SUA fft done" << endl;
     
     // take matrix product with U^\dag
+    // H.M. disable
+    /*
     for (int i=0; i<cells; i++)
     {
       // do the product UAD (matrix) times SUA (matrix)
@@ -645,6 +696,72 @@ int main(int argc, char *argv[])
         xi[i][a]=temp;
       }
     }
+     */
+    
+    
+    
+    ///// New code for evolution without adjoint
+    // H.M.
+    // H.M. matrix V xsi V^\dagger
+    for (int i=0; i<cells; i++)
+    {
+      *VxsiVx[i] = Matrix(param->getNc(),0);
+      *VxsiVy[i] = Matrix(param->getNc(),0);
+      //Matrix tmpx(param->getNc(),0);
+      //Matrix tmpy(param->getNc(),0);
+      for (int a=0; a<Nc2m1; a++)
+      {
+        *VxsiVx[i] = *VxsiVx[i]  + xi2[i][a]* lat->cells[i]->getU()
+            *group->getT(a) * lat->cells[i]->getU().conjg();
+       *VxsiVy[i] = *VxsiVy[i] + xi2[i][Nc2m1+a]* lat->cells[i]->getU()
+          *group->getT(a) * lat->cells[i]->getU().conjg();
+      }
+    }
+    
+    // FFT V xi V, save output to same array
+    fft->fftn(VxsiVx,VxsiVx,nn,2,1);
+    fft->fftn(VxsiVy,VxsiVy,nn,2,1);
+    
+    // Compute in Fourier space F(VxsiV) F(K)
+    // Note now *K[i].at(0) is x component of FT of K, and at(1) y comp
+    // Save to VxsiV to save memory
+    for (int i=0; i<cells; i++)
+    {
+      // Calculatedot prodcut
+      *VxsiVx[i] = (*K[i])[0] * (*VxsiVx[i]) +  (*K[i])[1] * (*VxsiVy[i]) ;
+    }
+    
+    // FFT back
+    fft->fftn(VxsiVx,VxsiVx,nn,2,-1); // Contains now dot product
+    //fft->fftn(VxsiVy,VxsiVy,nn,2,-1);
+    
+    
+
+
+    
+    // Evolve matrix
+    for (int i=0; i<cells; i++)
+    {
+      
+      Matrix left(param->getNc(),0);
+      left = -I * sqrt(ds) * (*VxsiVx[i]);
+      Matrix right(param->getNc(),0);
+      
+      
+      for (int a=0; a<Nc2m1; a++)
+      {
+        right = right + real(CKxi[i][a]) * group->getT(a);
+      }
+      right = I * sqrt(ds) * right;
+      
+      lat->cells[i]->setU( left.expm() * lat->cells[i]->getU() * right.expm() );
+      
+    }
+    
+    
+    
+    // Compute C(
+    
     
     //cout << "omega2 done" << endl;
     
@@ -652,6 +769,8 @@ int main(int argc, char *argv[])
     // checked: is real.
     
     // now compute omega^a and evolve the U field in every cell
+    // H.M. disable
+    /*
     for (int i=0; i<cells; i++)
     {
       for (int a=0; a<param->getNc()*param->getNc(); a++)
@@ -666,7 +785,7 @@ int main(int argc, char *argv[])
       M *= I;
       lat->cells[i]->setU(lat->cells[i]->getU()*M.expm());
     }
-    
+    */
     
     // here impose infrared regulator on newly updated U-fields
     //      infrared->regulate(lat, group, param, random, ids);
@@ -733,9 +852,11 @@ int main(int argc, char *argv[])
     delete K[i];
     delete S[i];
     delete CKxi[i];
-    delete CKUxi[i];
-    delete UA[i];
-    delete UA2[i];
+    //delete CKUxi[i];
+    //delete UA[i];
+    //delete UA2[i];
+    delete VxsiVx[i];
+    delete VxsiVy[i];
   }
   
   delete [] xi;
@@ -743,9 +864,11 @@ int main(int argc, char *argv[])
   delete [] K;
   delete [] S;
   delete [] CKxi;
-  delete [] CKUxi;
-  delete [] UA;
-  delete [] UA2;
+  //delete [] CKUxi;
+  //delete [] UA;
+  //delete [] UA2;
+  delete [] VxsiVx;
+  delete []VxsiVy;
   
   delete measure;
   delete group;
