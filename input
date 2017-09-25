@@ -18,6 +18,7 @@ L 5.12
 Ny 100
 mu0 0.28
 seed 1
+simpleLangevin 0
 EndOfFile
 
 #output_dir protons/bp_3.0_bq_0.3_mlqcd_0.25/

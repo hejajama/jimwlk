@@ -37,6 +37,8 @@ class Parameters
   double L;     // length in fm of the lattice - needed when including mass regulator - new scale
   string input_wline; // filename containing Wilson lines used as an input - note that size and NC should match!
   string output_dir;  // Directory where to save intermediate Wilson lines
+  
+  bool simple_langevin; // true: use 1212.4825
 
  public:
 
@@ -89,6 +91,8 @@ class Parameters
   string getInputWline() { return input_wline; }
   void setOutputDir(string f){ output_dir = f; }
   string getOutputDir() { return output_dir; }
+  void setSimpleLangevin(bool s){ simple_langevin=s; }
+  bool getSimpleLangevin() { return simple_langevin; }
   
   // switches:
   void setInitMethod(int x) {initMethod=x;}

@@ -108,6 +108,13 @@ int main(int argc, char *argv[])
   << param->getSeed() << endl;
   random->init_genrand64(rnum);
   
+  if (param->getSimpleLangevin()==true)
+  {
+    cout << "Using new simpler form of the Langevin step (arXiv:1212.4825)" << endl;
+  }
+  else
+    cout << "Using old version with deterministic term" << endl;
+    
   // allocate lattice
   Lattice *lat;
   lat = new Lattice(param, param->getNc(), param->getSize());
@@ -167,46 +174,54 @@ int main(int argc, char *argv[])
     CKxi[i] = new complex<double>[Nc2m1];
   }
   
+  //// Following only for old code without simple langevin step
   
   // C(K,U^{ab} xi^a), vector in a (color)
-  // H.M. disable
-  /*
   complex<double> ** CKUxi;
-  CKUxi = new complex<double> *[param->getSize()*param->getSize()];
-  
-  for(int i=0; i<param->getSize()*param->getSize(); i++)
-  {
-    CKUxi[i] = new complex<double>[Nc2m1];
-  }
-  
   Matrix ** UA;
-  UA = new Matrix *[param->getSize()*param->getSize()];
-  
-  for(int i=0; i<param->getSize()*param->getSize(); i++)
-  {
-    UA[i] = new Matrix(Nc2m1,0);
-  }
-  
   Matrix ** UA2;
-  UA2 = new Matrix *[param->getSize()*param->getSize()];
   
-  for(int i=0; i<param->getSize()*param->getSize(); i++)
+  if (param->getSimpleLangevin()==false)
   {
-    UA2[i] = new Matrix(Nc2m1,0);
+    CKUxi = new complex<double> *[param->getSize()*param->getSize()];
+    
+    for(int i=0; i<param->getSize()*param->getSize(); i++)
+    {
+      CKUxi[i] = new complex<double>[Nc2m1];
+    }
+    
+    
+    UA = new Matrix *[param->getSize()*param->getSize()];
+    
+    for(int i=0; i<param->getSize()*param->getSize(); i++)
+    {
+      UA[i] = new Matrix(Nc2m1,0);
+    }
+    
+    
+    UA2 = new Matrix *[param->getSize()*param->getSize()];
+    
+    for(int i=0; i<param->getSize()*param->getSize(); i++)
+    {
+      UA2[i] = new Matrix(Nc2m1,0);
+    }
   }
-  */
   
   // H.M. matrix V xsi V^\dagger
   Matrix ** VxsiVx;
-  VxsiVx = new Matrix *[param->getSize()*param->getSize()];
-  Matrix ** VxsiVy;
-  VxsiVy = new Matrix *[param->getSize()*param->getSize()];
-  for(int i=0; i<param->getSize()*param->getSize(); i++)
-  {
-    VxsiVx[i] = new Matrix(param->getNc(),0);
-    VxsiVy[i] = new Matrix(param->getNc(),0);
-  }
   
+  Matrix ** VxsiVy;
+  
+  if (param->getSimpleLangevin())
+  {
+    VxsiVx = new Matrix *[param->getSize()*param->getSize()];
+    VxsiVy = new Matrix *[param->getSize()*param->getSize()];
+    for(int i=0; i<param->getSize()*param->getSize(); i++)
+    {
+      VxsiVx[i] = new Matrix(param->getNc(),0);
+      VxsiVy[i] = new Matrix(param->getNc(),0);
+    }
+  }
   
   double m = param->getm();
   double Pi = param->PI;
@@ -330,7 +345,7 @@ int main(int argc, char *argv[])
           K[pos]->push_back(sqrt(alphas)*(cos(Pi*x)*(sin(2.*Pi*y)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.))))/nn[0] * mass_regulator);
           // S is a 1d vector
           S[pos]->push_back(alphas*(pow( cos(Pi*y) ,2.)*pow( sin(2.*Pi*x)/(2.*Pi) ,2.)+pow( cos(Pi*x) ,4.)*pow( sin(2.*Pi*y)/(2.*Pi) ,2.))
-                            /pow( (pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)) ,2.)/nn[0]/nn[0]);
+                            /pow( (pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)) ,2.)/nn[0]/nn[0] *mass_regulator);
           
           
           // 		  if(abs(x)<0.1 && abs(y)<0.1)
@@ -528,9 +543,11 @@ int main(int argc, char *argv[])
     //cout << "step " << ids << endl;
     for (int i=0; i<cells; i++)
     {
-      // H.M. disable
-      //lat->cells[i]->computeAdjointU();
-      //*UA2[i] = lat->cells[i]->getUA();
+      if (param->getSimpleLangevin()==false)
+      {
+        lat->cells[i]->computeAdjointU();
+        *UA2[i] = lat->cells[i]->getUA();
+      }
       
       // generate random Gaussian noise in every cell for Nc^2-1 color components and 2 spatial components x and y
       for (int n=0; n<Nc2m1*2; n++)
@@ -555,20 +572,20 @@ int main(int argc, char *argv[])
       
       // now compute the product \tilde(U)^{ab} xi_i^b
       // replace local xi by \tilde(U)^{ab} xi_i^b (do this to save memory)
-      //H.M. disable
-      /*
-      for (int a=0; a<Nc2m1; a++)
+      if (param->getSimpleLangevin()==false)
       {
-        xi[i][0*Nc2m1+a] = 0.;
-        xi[i][1*Nc2m1+a] = 0.;
-        for (int b=0; b<Nc2m1; b++)
+        for (int a=0; a<Nc2m1; a++)
         {
-          // do the product UA (matrix) times xi (vector)
-          xi[i][0*Nc2m1+a] += (*UA2[i]).get(a,b)*xi2[i][0*Nc2m1+b];
-          xi[i][1*Nc2m1+a] += (*UA2[i]).get(a,b)*xi2[i][1*Nc2m1+b];
+          xi[i][0*Nc2m1+a] = 0.;
+          xi[i][1*Nc2m1+a] = 0.;
+          for (int b=0; b<Nc2m1; b++)
+          {
+            // do the product UA (matrix) times xi (vector)
+            xi[i][0*Nc2m1+a] += (*UA2[i]).get(a,b)*xi2[i][0*Nc2m1+b];
+            xi[i][1*Nc2m1+a] += (*UA2[i]).get(a,b)*xi2[i][1*Nc2m1+b];
+          }
         }
       }
-       */
     }
     //cout << "CKxi done" << endl;
     
@@ -583,212 +600,212 @@ int main(int argc, char *argv[])
     //cout << "Uxi set" << endl;
     
     // FFT of UA*xi
-    // H.M. disable
-    //fft->fftnArray(xi,xi,nn,2,1,2*Nc2m1); // remember xi contains UA times xi now
-    //cout << "Uxi fft done" << endl;
-    
-    // now compute C(K_i,U^{ab} xi_i^a) == F^{-1}(F(K_i)F(U^{ab} xi_i^a)) = F^{-1}(F(K_x)F(U^{ab} xi_x^a)+(F(K_y)F(U^{ab} xi_y^a))
-    
-    // H.M. disable
-    /*
-    for (int i=0; i<cells; i++)
+    if (param->getSimpleLangevin()==false)
     {
-      for (int n=0; n<Nc2m1; n++)
+      fft->fftnArray(xi,xi,nn,2,1,2*Nc2m1); // remember xi contains UA times xi now
+      //cout << "Uxi fft done" << endl;
+      
+      // now compute C(K_i,U^{ab} xi_i^a) == F^{-1}(F(K_i)F(U^{ab} xi_i^a)) = F^{-1}(F(K_x)F(U^{ab} xi_x^a)+(F(K_y)F(U^{ab} xi_y^a))
+      
+      for (int i=0; i<cells; i++)
       {
-        CKUxi[i][n]=((*K[i])[0]*xi[i][n]+(*K[i])[1]*xi[i][Nc2m1+n]); // product of x components + product of y components
-      }
-    }
-    //cout << "CKUxi set" << endl;
-    
-    fft->fftnArray(CKUxi,CKUxi,nn,2,-1,Nc2m1);
-     */
-    //cout << "CKUxi fft done" << endl;
-    
-    // now CKUxi contains C(K_i,U^{ab} xi_i^a) - it is a vector with a components
-    // checked: CKUxi is real
-    
-    // now take \tilde{U}^\dag times CKUxi
-    // replace local xi by \tilde(U^\dag)^{ac} \tilde(U)^{cb} xi_i^b (do this to save memory)
-    
-    // H.M.
-    // Disable: keep CKxi[i][a] as  C(K_i,xi_i^a)
-    /*
-    for (int i=0; i<cells; i++)
-    {
-      UAD = *UA2[i];
-      UAD.conjg();
-      for (int a=0; a<Nc2m1; a++)
-      {
-        xi[i][a] = 0.;
-        for (int b=0; b<Nc2m1; b++)
+        for (int n=0; n<Nc2m1; n++)
         {
-          // do the product UA (matrix) times xi (vector)
-          xi[i][a] += UAD.get(a,b)*CKUxi[i][b];
+          CKUxi[i][n]=((*K[i])[0]*xi[i][n]+(*K[i])[1]*xi[i][Nc2m1+n]); // product of x components + product of y components
         }
-        // now xi contains the vector (in color) U^dag times CKUxi
-        // replace CKxi by CKxi - UCKUxi ( the first [ ] that multiplies sqrt(\delta s) )
-        CKxi[i][a] -= xi[i][a];
       }
-    }
-     */
-    //cout << "Udag CKUxi set" << endl;
-    // C(K_i, V xi_i^a V^\dagger) == F^{-1}(F(K_i)F(xi_i^a)) = F^{-1}(F(K_x)F(xi_x^a)+F(K_y)F(xi_y^a))
-    
-    
-    
-    
-    //cout << "omega1 done" << endl;
-    
-    // ------------------------------------------------------------------------------
-    // now do the second part in \omega^a
-    
-    // compute Fourier transform of \tilde{U}^{ab}
-    
-    // compute Fourier transform of UA
-    // H.M. disable
-    //fft->fftn(UA2,UA,nn,2,1);
-    
-    //cout << "UA fft done" << endl;
-    
-    // multiply by S
-    // H.M. disable
-    /*
-    for (int i=0; i<cells; i++)
-    {
-      *UA[i] = (*S[i])[0]*(*UA[i]);
-    }
-    
-    // FFT back
-    fft->fftn(UA,UA,nn,2,-1);
-     */
-    // now UA contains the convolution of S with UA
-    
-    //cout << "SUA fft done" << endl;
-    
-    // take matrix product with U^\dag
-    // H.M. disable
-    /*
-    for (int i=0; i<cells; i++)
-    {
-      // do the product UAD (matrix) times SUA (matrix)
-      UAD = *UA2[i];
-      UAD.conjg();
-      *UA[i] = UAD*(*UA[i]);
-      // now UA contains the product U^\dag C(S,U)
+      //cout << "CKUxi set" << endl;
       
-      // now take the product of 0.5*i*(\tilde{t}^a)^{bc} ( U^\dag C(S,U) )^{cb}
-      // (Hadamard product, same as Tr((\tilde{t}^a)^{bc} ( U^\dag C(S,U) )^{cd}) )
+      fft->fftnArray(CKUxi,CKUxi,nn,2,-1,Nc2m1);
       
-      for (int a=0; a<Nc2m1; a++)
+      //cout << "CKUxi fft done" << endl;
+      
+      // now CKUxi contains C(K_i,U^{ab} xi_i^a) - it is a vector with a components
+      // checked: CKUxi is real
+      
+      // now take \tilde{U}^\dag times CKUxi
+      // replace local xi by \tilde(U^\dag)^{ac} \tilde(U)^{cb} xi_i^b (do this to save memory)
+      
+
+      
+      for (int i=0; i<cells; i++)
       {
-        temp=0.;
-        for (int b=0; b<Nc2m1; b++)
+        UAD = *UA2[i];
+        UAD.conjg();
+        for (int a=0; a<Nc2m1; a++)
         {
-          for (int c=0; c<Nc2m1; c++)
+          xi[i][a] = 0.;
+          for (int b=0; b<Nc2m1; b++)
           {
-            if(group->getTA(a).get(b,c)!=0.)
-              temp += group->getTA(a).get(b,c)*(*UA[i]).get(c,b);
+            // do the product UA (matrix) times xi (vector)
+            xi[i][a] += UAD.get(a,b)*CKUxi[i][b];
           }
+          // now xi contains the vector (in color) U^dag times CKUxi
+          // replace CKxi by CKxi - UCKUxi ( the first [ ] that multiplies sqrt(\delta s) )
+          CKxi[i][a] -= xi[i][a];
         }
-        temp*=0.5*I; // 0.5*i is in Eq.(31) but missing in Eq.(34) ... must be there
-        // use xi as storage
-        xi[i][a]=temp;
       }
-    }
-     */
+      
+      
+      //cout << "Udag CKUxi set" << endl;
+      // C(K_i, V xi_i^a V^\dagger) == F^{-1}(F(K_i)F(xi_i^a)) = F^{-1}(F(K_x)F(xi_x^a)+F(K_y)F(xi_y^a))
+      
+      
+      
+      
+      //cout << "omega1 done" << endl;
+      
+      // ------------------------------------------------------------------------------
+      
+      // now do the second part in \omega^a
+      
+      // compute Fourier transform of \tilde{U}^{ab}
+      
+      // compute Fourier transform of UA
+      fft->fftn(UA2,UA,nn,2,1);
+      
+      //cout << "UA fft done" << endl;
+      
+      // multiply by S
+      
+      for (int i=0; i<cells; i++)
+      {
+        *UA[i] = (*S[i])[0]*(*UA[i]);
+      }
+      
+      // FFT back
+      fft->fftn(UA,UA,nn,2,-1);
+      
+      // now UA contains the convolution of S with UA
+      
+      //cout << "SUA fft done" << endl;
+      
+      // take matrix product with U^\dag
+
+      for (int i=0; i<cells; i++)
+      {
+        // do the product UAD (matrix) times SUA (matrix)
+        UAD = *UA2[i];
+        UAD.conjg();
+        *UA[i] = UAD*(*UA[i]);
+        // now UA contains the product U^\dag C(S,U)
+        
+        // now take the product of 0.5*i*(\tilde{t}^a)^{bc} ( U^\dag C(S,U) )^{cb}
+        // (Hadamard product, same as Tr((\tilde{t}^a)^{bc} ( U^\dag C(S,U) )^{cd}) )
+        
+        for (int a=0; a<Nc2m1; a++)
+        {
+          temp=0.;
+          for (int b=0; b<Nc2m1; b++)
+          {
+            for (int c=0; c<Nc2m1; c++)
+            {
+              if(group->getTA(a).get(b,c)!=0.)
+                temp += group->getTA(a).get(b,c)*(*UA[i]).get(c,b);
+            }
+          }
+          temp*=0.5*I; // 0.5*i is in Eq.(31) but missing in Eq.(34) ... must be there
+          // use xi as storage
+          xi[i][a]=temp;
+        }
+      }
+      
+      // now xi holds the second [], i.e. 0.5 i Tr[t^a U^\dag C(S,U)]
+      // checked: is real.
+      
+      // now compute omega^a and evolve the U field in every cell
+      
+      for (int i=0; i<cells; i++)
+      {
+        for (int a=0; a<param->getNc()*param->getNc(); a++)
+        {
+          M.set(a,0.);
+        }
+        for (int a=0; a<Nc2m1; a++)
+        {
+          //	      cout << sqrt(ds)*CKxi[i][a] - ds*xi[i][a] << endl;
+          M += real( sqrt(ds)*CKxi[i][a] - ds*xi[i][a])*group->getT(a);
+        }
+        M *= I;
+        lat->cells[i]->setU(lat->cells[i]->getU()*M.expm());
+      }
+       
+
+      
+     } // End: if not simple lengevin
     
     
     
     ///// New code for evolution without adjoint
-    // H.M.
-    // H.M. matrix V xsi V^\dagger
-    for (int i=0; i<cells; i++)
+    if (param->getSimpleLangevin())
     {
-      *VxsiVx[i] = Matrix(param->getNc(),0);
-      *VxsiVy[i] = Matrix(param->getNc(),0);
-      //Matrix tmpx(param->getNc(),0);
-      //Matrix tmpy(param->getNc(),0);
-      for (int a=0; a<Nc2m1; a++)
+      // H.M.
+      // H.M. matrix V xsi V^\dagger
+      for (int i=0; i<cells; i++)
       {
-        Matrix Uconj =lat->cells[i]->getU();
-        Uconj.conjg(); // Note that conjg() saves conjg. matrix over original one!
-        *VxsiVx[i] = *VxsiVx[i]  + xi2[i][a]* lat->cells[i]->getU()
+        *VxsiVx[i] = Matrix(param->getNc(),0);
+        *VxsiVy[i] = Matrix(param->getNc(),0);
+        //Matrix tmpx(param->getNc(),0);
+        //Matrix tmpy(param->getNc(),0);
+        for (int a=0; a<Nc2m1; a++)
+        {
+          Matrix Uconj =lat->cells[i]->getU();
+          Uconj.conjg(); // Note that conjg() saves conjg. matrix over original one!
+          *VxsiVx[i] = *VxsiVx[i]  + xi2[i][a]* lat->cells[i]->getU()
+              *group->getT(a) * Uconj;
+         *VxsiVy[i] = *VxsiVy[i] + xi2[i][Nc2m1+a]* lat->cells[i]->getU()
             *group->getT(a) * Uconj;
-       *VxsiVy[i] = *VxsiVy[i] + xi2[i][Nc2m1+a]* lat->cells[i]->getU()
-          *group->getT(a) * Uconj;
+        }
       }
-    }
-    
-    // FFT V xi V, save output to same array
-    fft->fftn(VxsiVx,VxsiVx,nn,2,1);
-    fft->fftn(VxsiVy,VxsiVy,nn,2,1);
-    
-    // Compute in Fourier space F(VxsiV) F(K)
-    // Note now *K[i].at(0) is x component of FT of K, and at(1) y comp
-    // Save to VxsiV to save memory
-    for (int i=0; i<cells; i++)
-    {
-      // Calculatedot prodcut
-      *VxsiVx[i] = (*K[i])[0] * (*VxsiVx[i]) +  (*K[i])[1] * (*VxsiVy[i]) ;
-    }
-    
-    // FFT back
-    fft->fftn(VxsiVx,VxsiVx,nn,2,-1); // Contains now dot product
-    //fft->fftn(VxsiVy,VxsiVy,nn,2,-1);
-    
-    
-
-
-    
-    // Evolve matrix
-    for (int i=0; i<cells; i++)
-    {
       
+      // FFT V xi V, save output to same array
+      fft->fftn(VxsiVx,VxsiVx,nn,2,1);
+      fft->fftn(VxsiVy,VxsiVy,nn,2,1);
       
-      Matrix left(param->getNc(),0);
-      left = -I * std::sqrt(ds) * (*VxsiVx[i]);
-      Matrix right(param->getNc(),0);
-      
-      
-      for (int a=0; a<Nc2m1; a++)
+      // Compute in Fourier space F(VxsiV) F(K)
+      // Note now *K[i].at(0) is x component of FT of K, and at(1) y comp
+      // Save to VxsiV to save memory
+      for (int i=0; i<cells; i++)
       {
-        // CKxi is approximately real, get more stable evolution by taking the real part?
-        right = right + real(CKxi[i][a]) * group->getT(a);
+        // Calculatedot prodcut
+        *VxsiVx[i] = (*K[i])[0] * (*VxsiVx[i]) +  (*K[i])[1] * (*VxsiVy[i]) ;
       }
-      right = I * std::sqrt(ds) * right;
       
-      lat->cells[i]->setU( left.expm() * lat->cells[i]->getU() * right.expm() );
+      // FFT back
+      fft->fftn(VxsiVx,VxsiVx,nn,2,-1); // Contains now dot product
+      //fft->fftn(VxsiVy,VxsiVy,nn,2,-1);
       
-    }
+      
+
+
+      
+      // Evolve matrix
+      for (int i=0; i<cells; i++)
+      {
+        
+        
+        Matrix left(param->getNc(),0);
+        left = -I * std::sqrt(ds) * (*VxsiVx[i]);
+        Matrix right(param->getNc(),0);
+        
+        
+        for (int a=0; a<Nc2m1; a++)
+        {
+          // CKxi is approximately real, get more stable evolution by taking the real part?
+          right = right + real(CKxi[i][a]) * group->getT(a);
+        }
+        right = I * std::sqrt(ds) * right;
+        
+        lat->cells[i]->setU( left.expm() * lat->cells[i]->getU() * right.expm() );
+        
+      }
+    }  // End: if simple Langevan
     
     
-    
-    // Compute C(
     
     
     //cout << "omega2 done" << endl;
     
-    // now xi holds the second [], i.e. 0.5 i Tr[t^a U^\dag C(S,U)]
-    // checked: is real.
-    
-    // now compute omega^a and evolve the U field in every cell
-    // H.M. disable
-    /*
-    for (int i=0; i<cells; i++)
-    {
-      for (int a=0; a<param->getNc()*param->getNc(); a++)
-      {
-        M.set(a,0.);
-      }
-      for (int a=0; a<Nc2m1; a++)
-      {
-        //	      cout << sqrt(ds)*CKxi[i][a] - ds*xi[i][a] << endl;
-        M += real( sqrt(ds)*CKxi[i][a] - ds*xi[i][a])*group->getT(a);
-      }
-      M *= I;
-      lat->cells[i]->setU(lat->cells[i]->getU()*M.expm());
-    }
-    */
     
     // here impose infrared regulator on newly updated U-fields
     //      infrared->regulate(lat, group, param, random, ids);
@@ -855,11 +872,18 @@ int main(int argc, char *argv[])
     delete K[i];
     delete S[i];
     delete CKxi[i];
-    //delete CKUxi[i];
-    //delete UA[i];
-    //delete UA2[i];
-    delete VxsiVx[i];
-    delete VxsiVy[i];
+    
+    if (param->getSimpleLangevin()==false)
+    {
+      delete CKUxi[i];
+      delete UA[i];
+      delete UA2[i];
+    }
+    else
+    {
+      delete VxsiVx[i];
+      delete VxsiVy[i];
+    }
   }
   
   delete [] xi;
@@ -867,12 +891,17 @@ int main(int argc, char *argv[])
   delete [] K;
   delete [] S;
   delete [] CKxi;
-  //delete [] CKUxi;
-  //delete [] UA;
-  //delete [] UA2;
-  delete [] VxsiVx;
-  delete []VxsiVy;
-  
+  if (param->getSimpleLangevin()==false)
+  {
+    delete [] CKUxi;
+    delete [] UA;
+    delete [] UA2;
+  }
+  else
+  {
+    delete [] VxsiVx;
+    delete []VxsiVy;
+  }
   delete measure;
   delete group;
   delete init;
@@ -936,6 +965,12 @@ int readInput(Setup *setup, Parameters *param, int argc, char *argv[])
   if (!ic_cli)
     param->setInputWline(setup->StringFind(file_name.c_str(), "input_wline"));
   param->setOutputDir(setup->StringFind(file_name.c_str(), "output_dir"));
+  
+  int simplelangevin=setup->IFind(file_name.c_str(), "simpleLangevin");
+  if (simplelangevin == 1)
+    param->setSimpleLangevin(true);
+  else
+    param->setSimpleLangevin(false);
   
   // write the used parameters into file "usedParameters.dat" as a double check for later
   time_t rawtime;
