@@ -102,8 +102,7 @@ int main(int argc, char *argv[])
   
   //initialize random generator
   long long rnum;
-  rnum=time(0)+param->getSeed();
-  rnum = 1;
+  rnum=time(0)//;+param->getSeed();
   cout << "Random seed =" << rnum << " made from time "
   << rnum-param->getSeed() << " and argument "
   << param->getSeed() << endl;
@@ -750,6 +749,7 @@ int main(int argc, char *argv[])
       
       for (int a=0; a<Nc2m1; a++)
       {
+        // CKxi is approximately real, get more stable evolution by taking the real part?
         right = right + real(CKxi[i][a]) * group->getT(a);
       }
       right = I * sqrt(ds) * right;

@@ -1,28 +1,28 @@
 mode 1
 Nc 3
-runningCoupling 1
-size 512
-steps 400
-ds 0.0004
-measureSteps 100
+runningCoupling 0
+size 256
+steps 100
+ds 0.0006
+measureSteps 10
 initMethod 10
-input_wline protons/old/disk//V-3.txt 
-output_dir protons/old/disk/
+input_wline test/V-1.txt 
+output_dir test/
 R 10.
 g2mua 1.
 Lambda_QCD 0.075
 kappa4Factor 1
 g 1.
-m 0.1
-L 10.24
+m 0.0
+L 5.12
 Ny 100
-mu0 0.225
+mu0 0.28
 seed 1
-suppress_m_lqcd 0.25
 EndOfFile
 
 #output_dir protons/bp_3.0_bq_0.3_mlqcd_0.25/
 
+#mu0 2.2176
 # mode 1
 # Nc 3
 # runningCoupling 1
