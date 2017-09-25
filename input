@@ -3,7 +3,7 @@ Nc 3
 runningCoupling 0
 size 256
 steps 100
-ds 0.0006
+ds 0.0008
 measureSteps 10
 initMethod 10
 input_wline test/V-1.txt 
@@ -13,7 +13,7 @@ g2mua 1.
 Lambda_QCD 0.075
 kappa4Factor 1
 g 1.
-m 0.0
+m 0.9
 L 5.12
 Ny 100
 mu0 0.28

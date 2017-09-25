@@ -102,7 +102,7 @@ int main(int argc, char *argv[])
   
   //initialize random generator
   long long rnum;
-  rnum=time(0)//;+param->getSeed();
+  rnum=param->getSeed(); // time(0)
   cout << "Random seed =" << rnum << " made from time "
   << rnum-param->getSeed() << " and argument "
   << param->getSeed() << endl;
@@ -710,10 +710,12 @@ int main(int argc, char *argv[])
       //Matrix tmpy(param->getNc(),0);
       for (int a=0; a<Nc2m1; a++)
       {
+        Matrix Uconj =lat->cells[i]->getU();
+        Uconj.conjg(); // Note that conjg() saves conjg. matrix over original one!
         *VxsiVx[i] = *VxsiVx[i]  + xi2[i][a]* lat->cells[i]->getU()
-            *group->getT(a) * lat->cells[i]->getU().conjg();
+            *group->getT(a) * Uconj;
        *VxsiVy[i] = *VxsiVy[i] + xi2[i][Nc2m1+a]* lat->cells[i]->getU()
-          *group->getT(a) * lat->cells[i]->getU().conjg();
+          *group->getT(a) * Uconj;
       }
     }
     
@@ -742,8 +744,9 @@ int main(int argc, char *argv[])
     for (int i=0; i<cells; i++)
     {
       
+      
       Matrix left(param->getNc(),0);
-      left = -I * sqrt(ds) * (*VxsiVx[i]);
+      left = -I * std::sqrt(ds) * (*VxsiVx[i]);
       Matrix right(param->getNc(),0);
       
       
@@ -752,7 +755,7 @@ int main(int argc, char *argv[])
         // CKxi is approximately real, get more stable evolution by taking the real part?
         right = right + real(CKxi[i][a]) * group->getT(a);
       }
-      right = I * sqrt(ds) * right;
+      right = I * std::sqrt(ds) * right;
       
       lat->cells[i]->setU( left.expm() * lat->cells[i]->getU() * right.expm() );
       
