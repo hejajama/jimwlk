@@ -1,24 +1,24 @@
 mode 1
 Nc 3
 runningCoupling 0
-size 256
+size 1024
 steps 100
 ds 0.0008
 measureSteps 10
 initMethod 10
-input_wline test/V-1.txt 
+input_wline test/V-0.txt_1024 
 output_dir test/
 R 10.
 g2mua 1.
 Lambda_QCD 0.075
 kappa4Factor 1
 g 1.
-m 0.9
+m 1.5
 L 5.12
 Ny 100
 mu0 0.28
 seed 1
-simpleLangevin 0
+simpleLangevin 1
 EndOfFile
 
 #output_dir protons/bp_3.0_bq_0.3_mlqcd_0.25/

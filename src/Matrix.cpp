@@ -6,6 +6,7 @@ Matrix::Matrix(int n)
 {
   ndim = n;
   nn = ndim*ndim;
+  e.reserve(nn);
   for(int i=0; i<nn; i++) e.push_back(complex<double>(0.0,0.0));
 }
 
@@ -14,6 +15,7 @@ Matrix::Matrix(int n, double a)
 {
   ndim = n;
   nn = ndim*ndim;
+  e.reserve(nn);
   for(int i=0; i<nn; i++) e.push_back(complex<double>(0.0,0.0));
   for(int i=0; i<ndim; i++) e[i*ndim+i] = complex<double>(a,0.0);
 }

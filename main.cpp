@@ -158,13 +158,17 @@ int main(int argc, char *argv[])
   }
   
   vector<complex<double> > ** S;
-  S = new vector<complex<double> >*[param->getSize()*param->getSize()];
   
-  for(int i=0; i<param->getSize()*param->getSize(); i++)
+  if (param->getSimpleLangevin()==false)
   {
-    S[i] = new vector<complex<double> >;
+    S = new vector<complex<double> >*[param->getSize()*param->getSize()];
+    
+    for(int i=0; i<param->getSize()*param->getSize(); i++)
+    {
+      S[i] = new vector<complex<double> >;
+    }
   }
-  
+    
   // C(K,xi^a), vector in a (color)
   complex<double>  ** CKxi;
   CKxi = new complex<double> *[param->getSize()*param->getSize()];
@@ -209,8 +213,10 @@ int main(int argc, char *argv[])
   
   // H.M. matrix V xsi V^\dagger
   Matrix ** VxsiVx;
-  
   Matrix ** VxsiVy;
+  Matrix zero_matrix(param->getNc(), 0);  // Optimize: easy to set
+  // some matrices to zero without creating a new one
+  // which would require Nc^2 push_back operations
   
   if (param->getSimpleLangevin())
   {
@@ -251,7 +257,8 @@ int main(int argc, char *argv[])
         K[pos]->push_back(0.);
         K[pos]->push_back(0.);
         // S is a 1d vector
-        S[pos]->push_back(0.);
+        if (param->getSimpleLangevin()==false)
+          S[pos]->push_back(0.);
       }
       else
       {
@@ -262,6 +269,13 @@ int main(int argc, char *argv[])
           // Regulate
           // Note that we use here r2 which is not in lattice units
           // because m is in GeV
+          
+          if (nn[0] != nn[1])
+          {
+            cerr << "WTF! Not square lattice? " << endl;
+            exit(1);
+          }
+          
           double length = param->getL();
           double phys_x = x/nn[0]*length; //in fm
           double phys_y = y/nn[1]*length;
@@ -292,7 +306,8 @@ int main(int argc, char *argv[])
           }
           else
             mass_regulator = bessel_argument * bes.val;
-
+          
+          
         }
         if (param->getRunningCoupling() == 0)
         {
@@ -315,8 +330,12 @@ int main(int argc, char *argv[])
           K[pos]->push_back(tmpk1);
           K[pos]->push_back(tmpk2);
           // S is a 1d vector
-          S[pos]->push_back((pow( cos(Pi*y) ,2.)*pow( sin(2.*Pi*x)/(2.*Pi) ,2.)+pow( cos(Pi*x) ,2.)*pow( sin(2.*Pi*y)/(2.*Pi) ,2.))
+          
+          if (param->getSimpleLangevin()==false)
+          {
+            S[pos]->push_back((pow( cos(Pi*y) ,2.)*pow( sin(2.*Pi*x)/(2.*Pi) ,2.)+pow( cos(Pi*x) ,2.)*pow( sin(2.*Pi*y)/(2.*Pi) ,2.))
                             /pow( (pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)) ,2.)/nn[0]/nn[0] * mass_regulator * mass_regulator);
+          }
           
         }
         else if (param->getRunningCoupling() == 1)
@@ -371,7 +390,8 @@ int main(int argc, char *argv[])
   cout << "alphas_0=" << 4.*param->PI/((11*param->getNc()-2*Nf)/3.*log(mu0*mu0/Lambda2)) << endl;
 		
   fft->fftnVector(K,K,nn,2,1);
-  fft->fftnVector(S,S,nn,2,1);
+  if (param->getSimpleLangevin()==false)
+    fft->fftnVector(S,S,nn,2,1);
   // now K and S contain the Discrete Fourier transforms of \vec{r}_i/r^2 and 1/r^2 respectively
   
   int Nc = param->getNc();
@@ -743,8 +763,8 @@ int main(int argc, char *argv[])
       // H.M. matrix V xsi V^\dagger
       for (int i=0; i<cells; i++)
       {
-        *VxsiVx[i] = Matrix(param->getNc(),0);
-        *VxsiVy[i] = Matrix(param->getNc(),0);
+        *VxsiVx[i] = zero_matrix;
+        *VxsiVy[i] = zero_matrix;
         //Matrix tmpx(param->getNc(),0);
         //Matrix tmpy(param->getNc(),0);
         for (int a=0; a<Nc2m1; a++)
@@ -870,11 +890,12 @@ int main(int argc, char *argv[])
     delete xi[i];
     delete xi2[i];
     delete K[i];
-    delete S[i];
+    
     delete CKxi[i];
     
     if (param->getSimpleLangevin()==false)
     {
+      delete S[i];
       delete CKUxi[i];
       delete UA[i];
       delete UA2[i];
@@ -889,10 +910,11 @@ int main(int argc, char *argv[])
   delete [] xi;
   delete [] xi2;
   delete [] K;
-  delete [] S;
+  
   delete [] CKxi;
   if (param->getSimpleLangevin()==false)
   {
+    delete [] S;
     delete [] CKUxi;
     delete [] UA;
     delete [] UA2;
