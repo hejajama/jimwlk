@@ -1878,6 +1878,11 @@ void Init::initFromData(Lattice *lat, Group *group, Parameters *param, Random *r
   
     // TODO: should check that parameters are consistent with the datafile, now assuming it
   ifstream input(param->getInputWline().c_str());
+  if (! input.good())
+  {
+	cerr << "File does not exist!" << endl;
+	exit(1) ; 
+}
   int size=param->getSize();
   //cout << "Reading " << size << " lines..." << endl;
   int i=0;

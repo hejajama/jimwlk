@@ -363,10 +363,12 @@ int main(int argc, char *argv[])
           K[pos]->push_back(sqrt(alphas)*(cos(Pi*y)*(sin(2.*Pi*x)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.))))/nn[0] * mass_regulator);
           K[pos]->push_back(sqrt(alphas)*(cos(Pi*x)*(sin(2.*Pi*y)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.))))/nn[0] * mass_regulator);
           // S is a 1d vector
+	if (param->getSimpleLangevin()==false)
+{
           S[pos]->push_back(alphas*(pow( cos(Pi*y) ,2.)*pow( sin(2.*Pi*x)/(2.*Pi) ,2.)+pow( cos(Pi*x) ,4.)*pow( sin(2.*Pi*y)/(2.*Pi) ,2.))
                             /pow( (pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)) ,2.)/nn[0]/nn[0] *mass_regulator);
           
-          
+ 	}         
           // 		  if(abs(x)<0.1 && abs(y)<0.1)
           // 		    {
           // 		      cout << "x=" << x << ", y=" << y << endl;

@@ -40,6 +40,11 @@ void Lattice::PrintWilsonLines(string filename)
 {
     cout << "Saving Wilson lines into " << filename << endl;
     fstream output(filename.c_str(),ios::out);
+    if (!output.good())
+    {
+	cerr << "Can't open file for saving, directory does not exist???" << endl;
+	exit(1);
+    }
     int length = sqrt(size);
     for (int yind=0; yind<length; yind++)
     {
