@@ -6,9 +6,9 @@ INCLUDES   = -I./src
 OBJECTS	= main.o
 DIRS = src
 OBJLIBS	= ./lib/libsrc.a
-LIBS	=  `gsl-config --libs` -L./lib -L/usr/local/lib -L/usr/lib -lfftw3
+LIBS	=  `../bin/gsl-config --libs` -L./lib  -l:libfftw3.so.3
 EXECUTABLE = main
-CXXFLAGS = -O2 `gsl-config --cflags`
+CXXFLAGS = -O2 `../bin/gsl-config --cflags`
 
 all: main
 

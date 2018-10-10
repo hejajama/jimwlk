@@ -1,23 +1,23 @@
 mode 1
 Nc 3
 runningCoupling 0
-size 1024
-steps 100
-ds 0.0008
-measureSteps 10
+size 700 
+steps 420
+ds 0.0004
+measureSteps 20
 initMethod 10
-input_wline test/V-0.txt_1024 
-output_dir test/
+input_wline modified_mv/nofluct_fit/cutoff_exp_0_bp_2.1_gaussQ2_0.8_N_700_L_5.12_m_0.4_2//V-NN.txt
+output_dir modified_mv/nofluct_fit/cutoff_exp_0_bp_2.1_gaussQ2_0.8_N_700_L_5.12_m_0.4_2/fixed_as_m_0.3/
 R 10.
 g2mua 1.
-Lambda_QCD 0.075
+Lambda_QCD 0.09
 kappa4Factor 1
 g 1.
-m 1.5
+m 0.3
 L 5.12
 Ny 100
 mu0 0.28
-seed 1
+seed NN 
 simpleLangevin 1
 EndOfFile
 
