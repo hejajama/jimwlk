@@ -1926,13 +1926,91 @@ void Init::initFromData(Lattice *lat, Group *group, Parameters *param, Random *r
     
 }
 
+void Init::initFromBinaryData(Lattice *lat, Group *group, Parameters *param, Random *random)
+{
+  cout << "Reading initial condition from file " << param->getInputWline() << endl;
 
+  std::ifstream InStream;
+  InStream.precision(10);
+  InStream.open(param->getInputWline().c_str(), std::ios::in | std::ios::binary);
+  int N;
+  int Nc;
+  double L,a;
+
+  if(InStream.is_open())
+  {
+            // READING IN PARAMETERS -----------------------------------------------------------------//
+      double temp;
+      InStream.read(reinterpret_cast<char*>(&N), sizeof(int));
+      InStream.read(reinterpret_cast<char*>(&Nc), sizeof(int));
+      InStream.read(reinterpret_cast<char*>(&L), sizeof(double));
+      InStream.read(reinterpret_cast<char*>(&a), sizeof(double));
+      InStream.read(reinterpret_cast<char*>(&temp), sizeof(double));
+                
+      std::cout << "# BINARY Size is " << N << ", Nc " << Nc << ", length is [fm] " << L << ", a is [fm]" << a << ", yeff is " << temp  << std::endl;
+                
+                
+      if(N != param->getSize())
+      {
+        std::cerr << "#---------------------------\n# ERROR wrong lattice size, data is " << N
+         << " but you have specified " << param->getSize() << "\n#--------------------------" << std::endl;
+         exit(0);
+      }
+                
+                
+      // READING ACTUAL DATA --------------------------------------------------------------------//
+      double ValueBuffer;
+      int INPUT_CTR=0;
+      double re,im;
+                
+      while( InStream.read(reinterpret_cast<char*>(&ValueBuffer), sizeof(double)))
+      {
+          if(INPUT_CTR%2==0)              //this is the real part
+          {
+               re=ValueBuffer;
+          }
+          else                            // this is the imaginary part, write then to variable //
+          {
+              im=ValueBuffer;
+                        
+              int TEMPINDX=((INPUT_CTR-1)/2);
+              int PositionIndx = TEMPINDX / 9;
+                        
+              int ix = PositionIndx / N;
+              int iy = PositionIndx - N*ix;
+                      
+                        
+              int MatrixIndx=TEMPINDX - PositionIndx*9;
+              int j=MatrixIndx/3;
+              int k=MatrixIndx-j*3;
+                   
+              int indx = N*iy + ix;
+              lat->cells[indx]->getU().set(j,k, complex<double> (re,im)); 
+              lat->cells[indx]->getUi().set(j,k, complex<double> (re,im)); 
+
+          }
+          INPUT_CTR++;
+    }
+  }
+
+  else
+  {
+      std::cerr << "ERROR COULD NOT OPEN FILE";
+      exit(0);
+   }
+   InStream.close();
+    
+        
+   param->setSize(N);
+   param->setNc(Nc);
+   param->setL(L); 
+}
 
 void Init::initU(Lattice *lat, Group *group, Parameters *param, Random *random)
 {
   cout << "Initializing SU(" << param->getNc() << ") U-fields in " << param->getSize()*param->getSize() 
        << " cells, using initialization method " << param->getInitMethod() << " ..." << endl;
-  
+ 
   if(param->getInitMethod()==1)
     {
       initU1(lat, group, param, random);
@@ -1951,6 +2029,9 @@ void Init::initU(Lattice *lat, Group *group, Parameters *param, Random *random)
     }
   else if (param->getInitMethod()==10)
     initFromData(lat, group, param, random);
+  else if (param->getInitMethod()==11)
+    initFromBinaryData(lat, group, param, random);
+
   else
     {
       cout << "[Init::initU]: No initialization method " << param->getInitMethod() 

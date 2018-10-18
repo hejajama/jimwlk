@@ -6,7 +6,7 @@ Originally written by Björn Schenke
 
 
 This version supports the following workflow:
-* Read in Wilson line from file input_filename defined in file "input"
+* Read in Wilson line from file input_filename defined in file "input" (set by init_method 10 or 11 in the input file)
 * Solve JIMWLK evolution and write output to files output_dir/input_filename_steps_NN, where NN is the number of steps taken
 
 At fixed coupling, steps is related to the Bjorken x via steps =  alphas * log(x0/x)/ (pi*pi*ds), where ds is defined in input file and x0 can be taken to be 0.01 or so

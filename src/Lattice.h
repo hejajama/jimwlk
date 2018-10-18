@@ -40,7 +40,7 @@ public:
 
   Cell** cells;         // the actual array of cells, the "lattice". cells is an array of pointers to cell objects
     
-  void PrintWilsonLines(string filename);
+  void PrintWilsonLines(string filename, Parameters *param);
 
 };
 

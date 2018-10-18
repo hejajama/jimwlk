@@ -849,7 +849,7 @@ int main(int argc, char *argv[])
       vector<string> inputname =split(param->getInputWline(),'/');
       
       fname << param->getOutputDir() << "/" << inputname[inputname.size()-1] << "_steps_" << ids;
-      lat->PrintWilsonLines(fname.str());
+      lat->PrintWilsonLines(fname.str(), param);
       //measure->dipoleOperator(param,lat,ids);
       //measure->TwoDCorrelator(param, lat, ids);
       //measure->fourPointFunction(param, lat, ids);

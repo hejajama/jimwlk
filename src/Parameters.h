@@ -15,7 +15,7 @@ class Parameters
 {
  private:
   // switches:
-  int initMethod;
+  int initMethod; // 10: read from txt file, 11 read from binary file
 
   int Nc;      // number of colors (SU(Nc))
   int size;    // the length of the lattice (make it 2^n, with n integer)
