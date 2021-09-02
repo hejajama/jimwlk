@@ -6,8 +6,8 @@ steps 340
 ds 0.0004
 measureSteps 20
 initMethod 11
-input_wline newcode/bp_2.1_nofluct_g2mu_0.8944_N_700_L_5.12_binary/V-NN
-output_dir newcode/bp_2.1_nofluct_g2mu_0.8944_N_700_L_5.12_binary//fixed_as_m_0.2/
+input_wline V-NN
+output_dir evolved_wilson_lines/
 R 10.
 g2mua 1.
 Lambda_QCD 0.09
@@ -17,7 +17,7 @@ m 0.2
 L 5.12
 Ny 100
 mu0 0.28
-seed NN 
+seed 0 
 simpleLangevin 1
 EndOfFile
 

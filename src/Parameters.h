@@ -15,7 +15,9 @@ class Parameters
 {
  private:
   // switches:
-  int initMethod; // 10: read from txt file, 11 read from binary file
+  int initMethod; 
+  // 1: Gauss, 2: MV, 3 MV+quartic rho^4 term
+  // 10: read from txt file, 11 read from binary file
 
   int Nc;      // number of colors (SU(Nc))
   int size;    // the length of the lattice (make it 2^n, with n integer)

@@ -9,6 +9,7 @@
 #include <sstream>
 #include <gsl/gsl_sf_bessel.h>
 #include <gsl/gsl_errno.h>
+#include "gitsha1.h"
 
 #include "Setup.h"
 #include "Init.h"
@@ -46,7 +47,11 @@ int main(int argc, char *argv[])
 {
   // welcome
   cout << endl;
-  cout << "JIMWLK solver v0.5" << endl;
+  cout << "JIMWLK solver " << endl;
+  cout << "Original code by B. Schenke, modified by H. Mäntysaari" << endl;
+  cout << "Webpage: https://github.com/hejajama/jimwlk " << endl;
+  cout << "Questions and comments to: heikki.mantysaari@jyu.fi" << endl;
+  cout << "Git version " << g_GIT_SHA1 << " local repo " << g_GIT_LOCAL_CHANGES << " main built " << __DATE__  << " " << __TIME__ << endl;
   cout << endl;
   // initialize helper class objects
   Setup *setup;

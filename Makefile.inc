@@ -1,7 +1,7 @@
 # put common definitions in here
-CXX	= icpc
+CXX	= gcc 
 PRJCFLAGS = -O2
-LD	= icpc
+LD	= gcc 
 LDFLAGS	= 
 AR	= ar
 ARFLAGS	= rc
