@@ -2,7 +2,7 @@
 
 The code solves JIMWLK evolution equation using Langevin step method
 
-Originally written by Björn Schenke, some modificatoins by Heikki Mäntysaari <heikki.mantysaari@jyu.fi>
+Originally written by Björn Schenke, some modifications by Heikki Mäntysaari <heikki.mantysaari@jyu.fi>
 
 The code can be built using cmake (needs GSL, FFTW and Boost libraries)
 
