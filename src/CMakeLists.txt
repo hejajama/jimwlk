@@ -10,7 +10,7 @@ add_library(
 	Init.cpp
 	Lattice.cpp
 	Matrix.cpp
-	MatrixExp.cpp
+	#MatrixExp.cpp
 	Measure.cpp
 	Random.cpp
 	Setup.cpp
