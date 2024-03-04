@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <iostream>
+#include <vector>
 
 using namespace std;
 
@@ -30,6 +31,10 @@ class Parameters
   double Qs;   // Q_s, to be dynamically determined
   int steps;   // number of rapidity steps
   int measureSteps; // number of steps in interval between measurements
+  int measureSteps1;
+  int measureSteps2;
+  int measureSteps3;
+  int Output_V_files; // number of steps in interval between measurements
   int mode;    // mode: (1) run the evolution, (2) analysis with files from disk 
   double mu0;  // cutoff to avoid the Landau pole in the 1-loop running coupling expression
   double LambdaQCD; // LambdaQCD in units of g^2mu
@@ -73,6 +78,14 @@ class Parameters
   int getSteps() {return steps;}
   void setMeasureSteps(int x) {measureSteps=x;};
   int getMeasureSteps() {return measureSteps;}
+  void setOutput_V_files(int x) {Output_V_files=x;};
+  int getOutput_V_files() {return Output_V_files;}
+  void setmeasureSteps1(int x) {measureSteps1=x;};
+  int getmeasureSteps1() {return measureSteps1;}
+  void setmeasureSteps2(int x) {measureSteps2=x;};
+  int getmeasureSteps2() {return measureSteps2;}
+  void setmeasureSteps3(int x) {measureSteps3=x;};
+  int getmeasureSteps3() {return measureSteps3;}
   void setMode(int x) {mode=x;};
   int getMode() {return mode;}
   void setRunningCoupling(int x) {runningCoupling=x;};

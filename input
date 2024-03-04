@@ -19,6 +19,10 @@ Ny 100
 mu0 0.28
 seed 0 
 simpleLangevin 1
+Output_V_files 3
+measureSteps1 20
+measureSteps2 40
+measureSteps3 60
 EndOfFile
 
 #output_dir protons/bp_3.0_bq_0.3_mlqcd_0.25/

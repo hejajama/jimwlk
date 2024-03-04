@@ -847,42 +847,53 @@ int main(int argc, char *argv[])
    // }
     
     // measure quantities
-    if ((ids)%param->getMeasureSteps()==0)
-    {
-      //cout << "measuring ... " << endl;
-      stringstream fname;
-      vector<string> inputname =split(param->getInputWline(),'/');
-      
-      fname << param->getOutputDir() << "/" << inputname[inputname.size()-1] << "_steps_" << ids;
-      lat->PrintWilsonLines(fname.str(), param);
-      //measure->dipoleOperator(param,lat,ids);
-      //measure->TwoDCorrelator(param, lat, ids);
-      //measure->fourPointFunction(param, lat, ids);
-      //cout << "Measure: twoPointFunctionInK..." << endl;
-      //measure->twoPointFunctionInK(param,lat,ids);
-      /*
-      if (ids%(param->getMeasureSteps()*5)==0 && ids/(param->getMeasureSteps()*5)<10)
+    if (param->getOutput_V_files() == 0 ) { // output all the VN files
+      if ((ids)%param->getMeasureSteps()==0)
       {
-        cout << "storing U in Uy[" << ids/(param->getMeasureSteps()*5) << "] ... " << endl;
-        measure->storeU(param, lat, ids/(param->getMeasureSteps()*5));
-        //cout << "Uy=" << lat->cells[25]->getUy(1) << ", U=" << lat->cells[25]->getU()<< endl; //check
-      }*/
-      //  cout << "Measure: fourPointFunctionInK..." << endl;
-      // measure->fourPointFunctionInK(param,lat,ids);
+        //cout << "measuring ... " << endl;
+        stringstream fname;
+        vector<string> inputname =split(param->getInputWline(),'/');
       
-      //  cout << "Measure: fourPointFunctionLine" << endl;
-      // measure->fourPointFunctionLine(param, lat, ids); //Q
-      //  	  cout << "Measure: fourPointFunctionLineUnequalY" << endl;
-      //  	  measure->fourPointFunctionLineUnequalY(param, lat, ids); //Q
-      //  cout << "Measure: fourPointFunctionSquare" << endl;
-      //  measure->fourPointFunctionSquare(param, lat, ids); //Q
-      // cout << "Measure: sixPointFunctionLine" << endl;
-      // measure->sixPointFunctionLine(param, lat, ids); //S_6
-      // cout << "Measure: sixPointFunctionSquare" << endl;
-      // measure->sixPointFunctionSquare(param, lat, ids); //S_6
-      // 	  cout << "Measure: Dionysis' stuff" << endl;
-      // 	  measure->twoPointFunctions(param, lat, 0);
-      cout << "done." << endl;
+        fname << param->getOutputDir() << "/" << inputname[inputname.size()-1] << "_steps_" << ids;
+        lat->PrintWilsonLines(fname.str(), param);
+        //measure->dipoleOperator(param,lat,ids);
+        //measure->TwoDCorrelator(param, lat, ids);
+        //measure->fourPointFunction(param, lat, ids);
+        //cout << "Measure: twoPointFunctionInK..." << endl;
+        //measure->twoPointFunctionInK(param,lat,ids);
+        /*
+        if (ids%(param->getMeasureSteps()*5)==0 && ids/(param->getMeasureSteps()*5)<10)
+        {
+          cout << "storing U in Uy[" << ids/(param->getMeasureSteps()*5) << "] ... " << endl;
+          measure->storeU(param, lat, ids/(param->getMeasureSteps()*5));
+          //cout << "Uy=" << lat->cells[25]->getUy(1) << ", U=" << lat->cells[25]->getU()<< endl; //check
+        }*/
+        //  cout << "Measure: fourPointFunctionInK..." << endl;
+        // measure->fourPointFunctionInK(param,lat,ids);
+        
+        //  cout << "Measure: fourPointFunctionLine" << endl;
+        // measure->fourPointFunctionLine(param, lat, ids); //Q
+        //  	  cout << "Measure: fourPointFunctionLineUnequalY" << endl;
+        //  	  measure->fourPointFunctionLineUnequalY(param, lat, ids); //Q
+        //  cout << "Measure: fourPointFunctionSquare" << endl;
+        //  measure->fourPointFunctionSquare(param, lat, ids); //Q
+        // cout << "Measure: sixPointFunctionLine" << endl;
+        // measure->sixPointFunctionLine(param, lat, ids); //S_6
+        // cout << "Measure: sixPointFunctionSquare" << endl;
+        // measure->sixPointFunctionSquare(param, lat, ids); //S_6
+        // 	  cout << "Measure: Dionysis' stuff" << endl;
+        // 	  measure->twoPointFunctions(param, lat, 0);
+        cout << "done." << endl;
+      }
+    } else { // output only selected the VN files
+        if ( ids == param->getmeasureSteps1() || ids == param->getmeasureSteps2() || ids == param->getmeasureSteps3()) {
+          stringstream fname;
+          vector<string> inputname =split(param->getInputWline(),'/');
+      
+          fname << param->getOutputDir() << "/" << inputname[inputname.size()-1] << "_steps_" << ids;
+          lat->PrintWilsonLines(fname.str(), param);
+          cout << "done." << endl;
+        }
     }
   }
   
@@ -986,6 +997,10 @@ int readInput(Setup *setup, Parameters *param, int argc, char *argv[])
   param->setNy(setup->IFind(file_name.c_str(),"Ny"));
   param->setSteps(setup->IFind(file_name.c_str(),"steps"));
   param->setMeasureSteps(setup->IFind(file_name.c_str(),"measureSteps"));
+  param->setOutput_V_files(setup->IFind(file_name.c_str(),"Output_V_files"));
+  param->setmeasureSteps1(setup->IFind(file_name.c_str(),"measureSteps1"));
+  param->setmeasureSteps2(setup->IFind(file_name.c_str(),"measureSteps2"));
+  param->setmeasureSteps3(setup->IFind(file_name.c_str(),"measureSteps3"));
   param->setMu0(setup->DFind(file_name.c_str(),"mu0"));
   param->setg(setup->DFind(file_name.c_str(),"g"));
   param->setkappa4Factor(setup->DFind(file_name.c_str(),"kappa4Factor"));
