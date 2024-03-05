@@ -34,6 +34,7 @@ class Parameters
   int measureSteps1;
   int measureSteps2;
   int measureSteps3;
+  int Fixedmu0Lambdaratio;
   int Output_V_files; // number of steps in interval between measurements
   int mode;    // mode: (1) run the evolution, (2) analysis with files from disk 
   double mu0;  // cutoff to avoid the Landau pole in the 1-loop running coupling expression
@@ -90,6 +91,8 @@ class Parameters
   int getMode() {return mode;}
   void setRunningCoupling(int x) {runningCoupling=x;};
   int getRunningCoupling() {return runningCoupling;}
+  void setFixedmu0Lambdaratio(int x) {Fixedmu0Lambdaratio=x;};
+  int getFixedmu0Lambdaratio() {return Fixedmu0Lambdaratio;}
   void setMu0(double x) {mu0=x;}
   double getMu0() {return mu0;}
   void setg(double x) {g=x;}

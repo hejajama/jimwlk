@@ -810,6 +810,9 @@ void Measure::twoPointFunctionInK(Parameters *param, Lattice *lat, int ids)
   double mu0=param->getMu0();
   double Lambda2 = param->getLambdaQCD()*param->getLambdaQCD();
   double c=0.2;
+  if (param->getFixedmu0Lambdaratio() == 1) {
+    mu0 = sqrt(Lambda2 * 50.);
+  }
   alphas = 4.*param->PI
     /((11*param->getNc()-2*Nf)/3.
       *log(pow((pow(mu0*mu0/Lambda2,1./c)+pow((Qs*Qs/(Lambda2*param->getg2mu()*param->getg2mu())),1./c)),c)));

@@ -353,7 +353,9 @@ int main(int argc, char *argv[])
           double phys_r2 = phys_x*phys_x + phys_y*phys_y;
           
           // Alphas in physical units! Lambda2 is lambda_QCD^2 in GeV
-          
+          if (param->getFixedmu0Lambdaratio() == 1) {
+              mu0 = sqrt(Lambda2 * 50.);
+          }
           alphas = 4.*param->PI
           /((11.0*param->getNc()-2.0*Nf)/3.*log(pow((pow(mu0*mu0/Lambda2,1./c)+pow(4./(phys_r2*Lambda2*fmgev*fmgev),1./c)),c)));
           
@@ -1002,9 +1004,10 @@ int readInput(Setup *setup, Parameters *param, int argc, char *argv[])
   param->setmeasureSteps2(setup->IFind(file_name.c_str(),"measureSteps2"));
   param->setmeasureSteps3(setup->IFind(file_name.c_str(),"measureSteps3"));
   param->setMu0(setup->DFind(file_name.c_str(),"mu0"));
+  param->setFixedmu0Lambdaratio(setup->DFind(file_name.c_str(),"Fixedmu0Lambdaratio"));
   param->setg(setup->DFind(file_name.c_str(),"g"));
   param->setkappa4Factor(setup->DFind(file_name.c_str(),"kappa4Factor"));
-  param->setm(setup->DFind(file_name.c_str(),"m"));
+  param->setm(setup->DFind(file_name.c_str(),"mjimwlk"));
   param->setL(setup->DFind(file_name.c_str(),"L"));
   if (!ic_cli)
     param->setInputWline(setup->StringFind(file_name.c_str(), "input_wline"));

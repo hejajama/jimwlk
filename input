@@ -17,6 +17,7 @@ m 0.2
 L 5.12
 Ny 100
 mu0 0.28
+Fixedmu0Lambdaratio 0
 seed 0 
 simpleLangevin 1
 Output_V_files 3
