@@ -7,6 +7,7 @@ ds 0.0004
 measureSteps 20
 initMethod 11
 input_wline V-NN
+mjimwlk 0.2
 output_dir evolved_wilson_lines/
 R 10.
 g2mua 1.
