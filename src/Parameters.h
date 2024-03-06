@@ -34,6 +34,10 @@ class Parameters
   int measureSteps1;
   int measureSteps2;
   int measureSteps3;
+  int measureSteps4;
+  int measureSteps5;
+  int measureSteps6;
+  int measureSteps7;
   int Fixedmu0Lambdaratio;
   int Output_V_files; // number of steps in interval between measurements
   int mode;    // mode: (1) run the evolution, (2) analysis with files from disk 
@@ -87,6 +91,14 @@ class Parameters
   int getmeasureSteps2() {return measureSteps2;}
   void setmeasureSteps3(int x) {measureSteps3=x;};
   int getmeasureSteps3() {return measureSteps3;}
+  void setmeasureSteps4(int x) {measureSteps4=x;};
+  int getmeasureSteps4() {return measureSteps4;}
+  void setmeasureSteps5(int x) {measureSteps5=x;};
+  int getmeasureSteps5() {return measureSteps5;}
+  void setmeasureSteps6(int x) {measureSteps6=x;};
+  int getmeasureSteps6() {return measureSteps6;}
+  void setmeasureSteps7(int x) {measureSteps7=x;};
+  int getmeasureSteps7() {return measureSteps7;}
   void setMode(int x) {mode=x;};
   int getMode() {return mode;}
   void setRunningCoupling(int x) {runningCoupling=x;};

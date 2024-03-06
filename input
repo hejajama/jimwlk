@@ -1,6 +1,6 @@
 mode 1
 Nc 3
-runningCoupling 0
+runningCoupling 1
 size 700 
 steps 340
 ds 0.0004
@@ -18,13 +18,17 @@ m 0.2
 L 5.12
 Ny 100
 mu0 0.28
-Fixedmu0Lambdaratio 0
+Fixedmu0Lambdaratio 1
 seed 0 
 simpleLangevin 1
-Output_V_files 3
+Output_V_files 7
 measureSteps1 20
 measureSteps2 40
-measureSteps3 60
+measureSteps3 600
+measureSteps4 600
+measureSteps5 600
+measureSteps6 600
+measureSteps7 600
 EndOfFile
 
 #output_dir protons/bp_3.0_bq_0.3_mlqcd_0.25/

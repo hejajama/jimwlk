@@ -888,7 +888,9 @@ int main(int argc, char *argv[])
         cout << "done." << endl;
       }
     } else { // output only selected the VN files
-        if ( ids == param->getmeasureSteps1() || ids == param->getmeasureSteps2() || ids == param->getmeasureSteps3()) {
+        if ( ids == param->getmeasureSteps1() || ids == param->getmeasureSteps2() || ids == param->getmeasureSteps3() || 
+             ids == param->getmeasureSteps4() || ids == param->getmeasureSteps5() || ids == param->getmeasureSteps6() ||
+             ids == param->getmeasureSteps7()) {
           stringstream fname;
           vector<string> inputname =split(param->getInputWline(),'/');
       
@@ -1003,6 +1005,10 @@ int readInput(Setup *setup, Parameters *param, int argc, char *argv[])
   param->setmeasureSteps1(setup->IFind(file_name.c_str(),"measureSteps1"));
   param->setmeasureSteps2(setup->IFind(file_name.c_str(),"measureSteps2"));
   param->setmeasureSteps3(setup->IFind(file_name.c_str(),"measureSteps3"));
+  param->setmeasureSteps4(setup->IFind(file_name.c_str(),"measureSteps4"));
+  param->setmeasureSteps5(setup->IFind(file_name.c_str(),"measureSteps5"));
+  param->setmeasureSteps6(setup->IFind(file_name.c_str(),"measureSteps6"));
+  param->setmeasureSteps7(setup->IFind(file_name.c_str(),"measureSteps7"));
   param->setMu0(setup->DFind(file_name.c_str(),"mu0"));
   param->setFixedmu0Lambdaratio(setup->DFind(file_name.c_str(),"Fixedmu0Lambdaratio"));
   param->setg(setup->DFind(file_name.c_str(),"g"));
