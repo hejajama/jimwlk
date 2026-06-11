@@ -3,6 +3,10 @@
 #include "Init.h"
 #include <complex>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 using namespace std;
 //**************************************************************************
 // Init class.
@@ -1105,12 +1109,20 @@ void Init::initU2(Lattice *lat, Group *group, Parameters *param, Random *random)
 //       // end test
 
 
+  // OPT: allocate rho once and reuse it for all Ny longitudinal slices
+  // (the original allocated and freed nn[0]*nn[1] matrices on every slice)
+  rho = new Matrix*[nn[0]*nn[1]];
+  for(int i=0; i<param->getSize()*param->getSize(); i++)
+    {
+      rho[i] = new Matrix(param->getNc(),0.);
+    }
+
   for(int k=0; k<Ny; k++)
     {
-      rho = new Matrix*[nn[0]*nn[1]];
-      for(int i=0; i<param->getSize()*param->getSize(); i++)
+      if (k>0)
 	{
-	  rho[i] = new Matrix(param->getNc(),0.);
+	  for(int i=0; i<param->getSize()*param->getSize(); i++)
+	    rho[i]->setZero();
 	}
 
       
@@ -1132,6 +1144,9 @@ void Init::initU2(Lattice *lat, Group *group, Parameters *param, Random *random)
       fft->fftn(rho,rho,nn,2,1);
 
       // then compute A^+
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) private(kx,ky,kt2,pos)
+#endif
       for (int i=0; i<nn[0]; i++)
 	{
 	  for (int j=0; j<nn[1]; j++)
@@ -1156,39 +1171,43 @@ void Init::initU2(Lattice *lat, Group *group, Parameters *param, Random *random)
     
       // compute U
       
+      // OPT: parallelized; this loop (dominated by expm) is the hot spot of
+      // the MV initialization. Each site is independent.
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) firstprivate(temp,temp2)
+#endif
       for (int i=0; i<nn[0]; i++)
 	{
 	  for (int j=0; j<nn[1]; j++)
 	    {
-	      pos = i*nn[1]+j;
+	      int mypos = i*nn[1]+j;
 	      //multiply by -i:
 	      for(int nc=0; nc<Nc*Nc; nc++)
 		{
-		  temp3 = rho[pos]->getRe(nc); // rho contains A!
-		  rho[pos]->setRe(nc,rho[pos]->getIm(nc));
-		  rho[pos]->setIm(nc,-temp3);
+		  double t3 = rho[mypos]->getRe(nc); // rho contains A!
+		  rho[mypos]->setRe(nc,rho[mypos]->getIm(nc));
+		  rho[mypos]->setIm(nc,-t3);
 		}
-	      temp2 = *rho[pos];
-	      //cout << temp2 << endl;
+	      temp2 = *rho[mypos];
 	      temp2.expm();
-	      temp = temp2 * lat->cells[pos]->getU();
-	      //temp = (unit-*A[pos]) * lat->cells[pos]->getU();
+	      temp = temp2 * lat->cells[mypos]->getU();
 	      // set U
-	      lat->cells[pos]->setU(temp);
-	      lat->cells[pos]->setUi(temp); //this to keep the initial U's at every rapidity step (for unequal rapidity correlations)
+	      lat->cells[mypos]->setU(temp);
+	      lat->cells[mypos]->setUi(temp); //this to keep the initial U's at every rapidity step (for unequal rapidity correlations)
 	    }
 	}
         
       //      UD=lat->cells[pos]->getU();
       //UD.conjg();
 
-      for(int i=0; i<param->getSize()*param->getSize(); i++)
-	{
-	  delete rho[i];
-	}
-      
-      delete[] rho;
     }
+
+  for(int i=0; i<param->getSize()*param->getSize(); i++)
+    {
+      delete rho[i];
+    }
+  
+  delete[] rho;
 
 
    // done. 

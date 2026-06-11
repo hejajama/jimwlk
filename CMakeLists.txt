@@ -31,7 +31,34 @@ else ()
 endif()
 
 # Optimization on (for debug flags, change to Debug)
-set(CMAKE_BUILD_TYPE Release)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
+# OPT: tune for the build machine (disable for portable binaries:
+# cmake -DENABLE_NATIVE=OFF ..)
+option(ENABLE_NATIVE "Build with -march=native" ON)
+if(ENABLE_NATIVE AND NOT MSVC)
+  include(CheckCXXCompilerFlag)
+  check_cxx_compiler_flag("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
+  if(COMPILER_SUPPORTS_MARCH_NATIVE)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
+  endif()
+endif()
+
+# Strictly reproducible FFT plans (FFTW_ESTIMATE instead of FFTW_MEASURE);
+# useful for validation and debugging
+option(DETERMINISTIC_FFT "Use deterministic FFTW plans" OFF)
+
+# Reproduce the original code's floating point summation order in the
+# simple-Langevin V xi V^dag construction (slower; for strict A/B testing)
+option(LEGACY_SL_SUM "Bitwise-legacy simple-Langevin summation" OFF)
+if(LEGACY_SL_SUM)
+  add_definitions(-DJIMWLK_LEGACY_SL_SUM)
+endif()
+if(DETERMINISTIC_FFT)
+  add_definitions(-DJIMWLK_DETERMINISTIC_FFT)
+endif()
 
 find_package(GSL REQUIRED)
 include_directories(${GSL_INCLUDE_DIRS})

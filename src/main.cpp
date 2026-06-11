@@ -11,6 +11,10 @@
 #include <gsl/gsl_errno.h>
 #include "gitsha1.h"
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #include "Setup.h"
 #include "Init.h"
 #include "Infrared.h"
@@ -370,8 +374,13 @@ int main(int argc, char *argv[])
           // S is a 1d vector
 	if (param->getSimpleLangevin()==false)
 {
-          S[pos]->push_back(alphas*(pow( cos(Pi*y) ,2.)*pow( sin(2.*Pi*x)/(2.*Pi) ,2.)+pow( cos(Pi*x) ,4.)*pow( sin(2.*Pi*y)/(2.*Pi) ,2.))
-                            /pow( (pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)) ,2.)/nn[0]/nn[0] *mass_regulator);
+          // BUGFIX: the original had cos^2(Pi*y) on the x-term but cos^4(Pi*x)
+          // on the y-term (the kernel must be symmetric under x<->y; compare
+          // the fixed-coupling branch above), and multiplied by the mass
+          // regulator only once although S ~ K^2 (the fixed-coupling branch
+          // correctly uses mass_regulator^2).
+          S[pos]->push_back(alphas*(pow( cos(Pi*y) ,2.)*pow( sin(2.*Pi*x)/(2.*Pi) ,2.)+pow( cos(Pi*x) ,2.)*pow( sin(2.*Pi*y)/(2.*Pi) ,2.))
+                            /pow( (pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)) ,2.)/nn[0]/nn[0] * mass_regulator * mass_regulator);
           
  	}         
           // 		  if(abs(x)<0.1 && abs(y)<0.1)
@@ -447,47 +456,16 @@ int main(int argc, char *argv[])
   fouti << " " << endl;
   fouti.close();
   
-  char outname[25];
-  sprintf(outname, "k-corr-unequal-%0.5f",0*param->getMeasureSteps()*5*ds*Pi*Pi);
-  fstream fouty0(outname,ios::out);
-  fouty0 << " " << endl;
-  fouty0.close();
-  sprintf(outname, "k-corr-unequal-%0.5f",1*param->getMeasureSteps()*5*ds*Pi*Pi);
-  fstream fouty1(outname,ios::out);
-  fouty1 << " " << endl;
-  fouty1.close();
-  sprintf(outname, "k-corr-unequal-%0.5f",2*param->getMeasureSteps()*5*ds*Pi*Pi);
-  fstream fouty2(outname,ios::out);
-  fouty2 << " " << endl;
-  fouty2.close();
-  sprintf(outname, "k-corr-unequal-%0.5f",3*param->getMeasureSteps()*5*ds*Pi*Pi);
-  fstream fouty3(outname,ios::out);
-  fouty3 << " " << endl;
-  fouty3.close();
-  sprintf(outname, "k-corr-unequal-%0.5f",4*param->getMeasureSteps()*5*ds*Pi*Pi);
-  fstream fouty4(outname,ios::out);
-  fouty4 << " " << endl;
-  fouty4.close();
-  sprintf(outname, "k-corr-unequal-%0.5f",5*param->getMeasureSteps()*5*ds*Pi*Pi);
-  fstream fouty5(outname,ios::out);
-  fouty5 << " " << endl;
-  fouty5.close();
-  sprintf(outname, "k-corr-unequal-%0.5f",6*param->getMeasureSteps()*5*ds*Pi*Pi);
-  fstream fouty6(outname,ios::out);
-  fouty6 << " " << endl;
-  fouty6.close();
-  sprintf(outname, "k-corr-unequal-%0.5f",7*param->getMeasureSteps()*5*ds*Pi*Pi);
-  fstream fouty7(outname,ios::out);
-  fouty7 << " " << endl;
-  fouty7.close();
-  sprintf(outname, "k-corr-unequal-%0.5f",8*param->getMeasureSteps()*5*ds*Pi*Pi);
-  fstream fouty8(outname,ios::out);
-  fouty8 << " " << endl;
-  fouty8.close();
-  sprintf(outname, "k-corr-unequal-%0.5f",9*param->getMeasureSteps()*5*ds*Pi*Pi);
-  fstream fouty9(outname,ios::out);
-  fouty9 << " " << endl;
-  fouty9.close();
+  // OPT: replaced 10 copy-pasted blocks by a loop (and enlarged the buffer,
+  // which could overflow for large step values)
+  char outname[64];
+  for (int iy=0; iy<10; iy++)
+  {
+    snprintf(outname, sizeof(outname), "k-corr-unequal-%0.5f",iy*param->getMeasureSteps()*5*ds*Pi*Pi);
+    fstream fouty(outname,ios::out);
+    fouty << " " << endl;
+    fouty.close();
+  }
   
   fstream fout2d("2dcorr.dat",ios::out);
   fout2d << " " << endl;
@@ -560,23 +538,50 @@ int main(int argc, char *argv[])
   cout << "done." << endl;
   
   
+  // OPT: the adjoint generators (TA)^a_{bc} are extremely sparse (~6 of 64
+  // entries non-zero for SU(3)). Precompute the non-zero entries once, in the
+  // same row-major (b,c) order as the original triple loop, so the Hadamard
+  // trace below is evaluated with bitwise-identical arithmetic but without
+  // scanning the zeros.
+  struct TAEntry { int b; int c; complex<double> v; };
+  vector<vector<TAEntry> > TAsparse(Nc2m1);
+  for (int a=0; a<Nc2m1; a++)
+  {
+    for (int b=0; b<Nc2m1; b++)
+      for (int c=0; c<Nc2m1; c++)
+        if (group->getTA(a).get(b,c)!=0.)
+          TAsparse[a].push_back({b,c,group->getTA(a).get(b,c)});
+  }
+  
   // ---------------------------------------------------------------------------------------------------------------------------------------
   // begin evolution
   // here the loop over steps s begins
   cout << "Beginning evolution ..." << endl;
+#ifdef _OPENMP
+  cout << "OpenMP enabled, using up to " << omp_get_max_threads() << " threads" << endl;
+#endif
   
   for(int ids=1; ids<=steps; ids++)
   {
     //cout << "step " << ids << endl;
-    for (int i=0; i<cells; i++)
+    if (param->getSimpleLangevin()==false)
     {
-      if (param->getSimpleLangevin()==false)
+      // OPT: deterministic per-cell work, parallelized
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
+      for (int i=0; i<cells; i++)
       {
         lat->cells[i]->computeAdjointU();
         *UA2[i] = lat->cells[i]->getUA();
       }
-      
-      // generate random Gaussian noise in every cell for Nc^2-1 color components and 2 spatial components x and y
+    }
+    
+    // generate random Gaussian noise in every cell for Nc^2-1 color components and 2 spatial components x and y
+    // NOTE: this loop must stay serial so that the random number sequence
+    // (and therefore the physics trajectory for a given seed) is unchanged.
+    for (int i=0; i<cells; i++)
+    {
       for (int n=0; n<Nc2m1*2; n++)
       {
         xi2[i][n]=complex<double>(random->Gauss(),0.); // real xi
@@ -590,6 +595,9 @@ int main(int argc, char *argv[])
     //cout << "xi fft done" << endl;
     
     // now compute C(K_i,xi_i^a) == F^{-1}(F(K_i)F(xi_i^a)) = F^{-1}(F(K_x)F(xi_x^a)+F(K_y)F(xi_y^a))
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
     for (int i=0; i<cells; i++)
     {
       for (int n=0; n<Nc2m1; n++)
@@ -655,6 +663,9 @@ int main(int argc, char *argv[])
       
 
       
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) firstprivate(UAD)
+#endif
       for (int i=0; i<cells; i++)
       {
         UAD = *UA2[i];
@@ -695,9 +706,12 @@ int main(int argc, char *argv[])
       
       // multiply by S
       
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
       for (int i=0; i<cells; i++)
       {
-        *UA[i] = (*S[i])[0]*(*UA[i]);
+        *UA[i] *= (*S[i])[0];   // OPT: in place, no temporary
       }
       
       // FFT back
@@ -709,6 +723,9 @@ int main(int argc, char *argv[])
       
       // take matrix product with U^\dag
 
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) firstprivate(UAD)
+#endif
       for (int i=0; i<cells; i++)
       {
         // do the product UAD (matrix) times SUA (matrix)
@@ -719,21 +736,19 @@ int main(int argc, char *argv[])
         
         // now take the product of 0.5*i*(\tilde{t}^a)^{bc} ( U^\dag C(S,U) )^{cb}
         // (Hadamard product, same as Tr((\tilde{t}^a)^{bc} ( U^\dag C(S,U) )^{cd}) )
+        // OPT: iterate only over the precomputed non-zero entries of TA
+        // (same order as the original loop, so bitwise identical)
         
         for (int a=0; a<Nc2m1; a++)
         {
-          temp=0.;
-          for (int b=0; b<Nc2m1; b++)
+          complex<double> tmp=0.;
+          for (size_t s=0; s<TAsparse[a].size(); s++)
           {
-            for (int c=0; c<Nc2m1; c++)
-            {
-              if(group->getTA(a).get(b,c)!=0.)
-                temp += group->getTA(a).get(b,c)*(*UA[i]).get(c,b);
-            }
+            tmp += TAsparse[a][s].v*(*UA[i]).get(TAsparse[a][s].c,TAsparse[a][s].b);
           }
-          temp*=0.5*I; // 0.5*i is in Eq.(31) but missing in Eq.(34) ... must be there
+          tmp*=0.5*I; // 0.5*i is in Eq.(31) but missing in Eq.(34) ... must be there
           // use xi as storage
-          xi[i][a]=temp;
+          xi[i][a]=tmp;
         }
       }
       
@@ -742,16 +757,16 @@ int main(int argc, char *argv[])
       
       // now compute omega^a and evolve the U field in every cell
       
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) firstprivate(M)
+#endif
       for (int i=0; i<cells; i++)
       {
-        for (int a=0; a<param->getNc()*param->getNc(); a++)
-        {
-          M.set(a,0.);
-        }
+        M.setZero();
         for (int a=0; a<Nc2m1; a++)
         {
-          //	      cout << sqrt(ds)*CKxi[i][a] - ds*xi[i][a] << endl;
-          M += real( sqrt(ds)*CKxi[i][a] - ds*xi[i][a])*group->getT(a);
+          // OPT: in-place axpy, no matrix temporaries (same arithmetic)
+          M.addMultiple(real( sqrt(ds)*CKxi[i][a] - ds*xi[i][a]), group->getT(a));
         }
         M *= I;
         lat->cells[i]->setU(lat->cells[i]->getU()*M.expm());
@@ -768,21 +783,47 @@ int main(int argc, char *argv[])
     {
       // H.M.
       // H.M. matrix V xsi V^\dagger
+      // OPT: use V (sum_a xi^a t^a) V^dag instead of sum_a xi^a (V t^a V^dag).
+      // This replaces 2*(Nc^2-1) triple matrix products (and as many
+      // conjugations) per site by building two small color matrices and doing
+      // a single triple product each. Algebraically identical.
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
       for (int i=0; i<cells; i++)
       {
-        *VxsiVx[i] = zero_matrix;
-        *VxsiVy[i] = zero_matrix;
-        //Matrix tmpx(param->getNc(),0);
-        //Matrix tmpy(param->getNc(),0);
+#ifndef JIMWLK_LEGACY_SL_SUM
+        const int nc = zero_matrix.getNDim();
+        Matrix Ax(nc,0.), Ay(nc,0.);
         for (int a=0; a<Nc2m1; a++)
         {
-          Matrix Uconj =lat->cells[i]->getU();
-          Uconj.conjg(); // Note that conjg() saves conjg. matrix over original one!
-          *VxsiVx[i] = *VxsiVx[i]  + xi2[i][a]* lat->cells[i]->getU()
-              *group->getT(a) * Uconj;
-         *VxsiVy[i] = *VxsiVy[i] + xi2[i][Nc2m1+a]* lat->cells[i]->getU()
-            *group->getT(a) * Uconj;
+          Ax.addMultiple(xi2[i][a],       group->getT(a));
+          Ay.addMultiple(xi2[i][Nc2m1+a], group->getT(a));
         }
+        Matrix Uconj = lat->cells[i]->getU();
+        Uconj.conjg(); // Note that conjg() saves conjg. matrix over original one!
+        Matrix tmp(nc);
+        Matrix::mult(lat->cells[i]->getU(), Ax, tmp);
+        Matrix::mult(tmp, Uconj, *VxsiVx[i]);
+        Matrix::mult(lat->cells[i]->getU(), Ay, tmp);
+        Matrix::mult(tmp, Uconj, *VxsiVy[i]);
+#else
+        // Legacy summation order, bitwise identical to the original code
+        // (build with -DLEGACY_SL_SUM=ON; ~8x more matrix products).
+        // Differences to the default branch are pure floating-point
+        // re-association, < 1e-15 per step.
+        *VxsiVx[i] = zero_matrix;
+        *VxsiVy[i] = zero_matrix;
+        for (int a=0; a<Nc2m1; a++)
+        {
+          Matrix Uconj = lat->cells[i]->getU();
+          Uconj.conjg();
+          *VxsiVx[i] = *VxsiVx[i] + xi2[i][a]* lat->cells[i]->getU()
+              *group->getT(a) * Uconj;
+          *VxsiVy[i] = *VxsiVy[i] + xi2[i][Nc2m1+a]* lat->cells[i]->getU()
+              *group->getT(a) * Uconj;
+        }
+#endif
       }
       
       // FFT V xi V, save output to same array
@@ -792,10 +833,14 @@ int main(int argc, char *argv[])
       // Compute in Fourier space F(VxsiV) F(K)
       // Note now *K[i].at(0) is x component of FT of K, and at(1) y comp
       // Save to VxsiV to save memory
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
       for (int i=0; i<cells; i++)
       {
-        // Calculatedot prodcut
-        *VxsiVx[i] = (*K[i])[0] * (*VxsiVx[i]) +  (*K[i])[1] * (*VxsiVy[i]) ;
+        // Calculate dot product
+        *VxsiVx[i] *= (*K[i])[0];
+        VxsiVx[i]->addMultiple((*K[i])[1], *VxsiVy[i]);
       }
       
       // FFT back
@@ -807,21 +852,20 @@ int main(int argc, char *argv[])
 
       
       // Evolve matrix
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
       for (int i=0; i<cells; i++)
       {
-        
-        
-        Matrix left(param->getNc(),0);
-        left = -I * std::sqrt(ds) * (*VxsiVx[i]);
+        Matrix left = -I * std::sqrt(ds) * (*VxsiVx[i]);
         Matrix right(param->getNc(),0);
-        
         
         for (int a=0; a<Nc2m1; a++)
         {
           // CKxi is approximately real, get more stable evolution by taking the real part?
-          right = right + real(CKxi[i][a]) * group->getT(a);
+          right.addMultiple(real(CKxi[i][a]), group->getT(a)); // OPT: in-place axpy
         }
-        right = I * std::sqrt(ds) * right;
+        right = I * std::sqrt(ds) * std::move(right);
         
         lat->cells[i]->setU( left.expm() * lat->cells[i]->getU() * right.expm() );
         
@@ -894,16 +938,17 @@ int main(int argc, char *argv[])
   // finalize
   for(int i=0; i<param->getSize()*param->getSize(); i++)
   {
-    delete xi[i];
-    delete xi2[i];
+    // BUGFIX: arrays allocated with new[] must be released with delete[]
+    delete [] xi[i];
+    delete [] xi2[i];
     delete K[i];
     
-    delete CKxi[i];
+    delete [] CKxi[i];
     
     if (param->getSimpleLangevin()==false)
     {
       delete S[i];
-      delete CKUxi[i];
+      delete [] CKUxi[i];
       delete UA[i];
       delete UA2[i];
     }

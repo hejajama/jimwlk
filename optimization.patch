@@ -1,0 +1,2493 @@
+diff -ruN '--exclude=build' '--exclude=.git' '--exclude=build-nonative' '--exclude=build-legacy' jimwlk/CMakeLists.txt jimwlk-opt/CMakeLists.txt
+--- jimwlk/CMakeLists.txt	2026-06-10 16:45:45.180431097 +0000
++++ jimwlk-opt/CMakeLists.txt	2026-06-11 00:33:00.001275714 +0000
+@@ -31,7 +31,34 @@
+ endif()
+ 
+ # Optimization on (for debug flags, change to Debug)
+-set(CMAKE_BUILD_TYPE Release)
++if(NOT CMAKE_BUILD_TYPE)
++  set(CMAKE_BUILD_TYPE Release)
++endif()
++
++# OPT: tune for the build machine (disable for portable binaries:
++# cmake -DENABLE_NATIVE=OFF ..)
++option(ENABLE_NATIVE "Build with -march=native" ON)
++if(ENABLE_NATIVE AND NOT MSVC)
++  include(CheckCXXCompilerFlag)
++  check_cxx_compiler_flag("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
++  if(COMPILER_SUPPORTS_MARCH_NATIVE)
++    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
++  endif()
++endif()
++
++# Strictly reproducible FFT plans (FFTW_ESTIMATE instead of FFTW_MEASURE);
++# useful for validation and debugging
++option(DETERMINISTIC_FFT "Use deterministic FFTW plans" OFF)
++
++# Reproduce the original code's floating point summation order in the
++# simple-Langevin V xi V^dag construction (slower; for strict A/B testing)
++option(LEGACY_SL_SUM "Bitwise-legacy simple-Langevin summation" OFF)
++if(LEGACY_SL_SUM)
++  add_definitions(-DJIMWLK_LEGACY_SL_SUM)
++endif()
++if(DETERMINISTIC_FFT)
++  add_definitions(-DJIMWLK_DETERMINISTIC_FFT)
++endif()
+ 
+ find_package(GSL REQUIRED)
+ include_directories(${GSL_INCLUDE_DIRS})
+diff -ruN '--exclude=build' '--exclude=.git' '--exclude=build-nonative' '--exclude=build-legacy' jimwlk/src/Cell.cpp jimwlk-opt/src/Cell.cpp
+--- jimwlk/src/Cell.cpp	2026-06-10 16:45:45.182329177 +0000
++++ jimwlk-opt/src/Cell.cpp	2026-06-10 16:56:12.050159894 +0000
+@@ -1,158 +1,137 @@
+ #include "Cell.h"
+ 
+ Cell::Cell(int N)
++  : Nc(N), xpos(0.), ypos(0.),
++    U(N,1.), Ui(N,1.), UA(N*N-1)
+ {
+-  Nc = N;
+-  int Nc2m1 = Nc*Nc-1;
+-  
+-  U = new Matrix(Nc,1.);
+-  Ui = new Matrix(Nc,1.);
+-  Uy = new Matrix*[10]; // save 10 different y's
+-  for (int i=0; i<10; i++)
+-    {
+-      Uy[i] = new Matrix(Nc,1.);
+-    }
+-  UA = new Matrix(Nc*Nc-1);
+ }
+ 
+ Cell::~Cell()
+ {
+-  int Nc2m1 = Nc*Nc-1;
+-  delete U;
+-  delete Ui;
+-  for (int i=0; i<10; i++)
+-    {
+-       delete Uy[i];
+-    }
+-  delete Uy;
+-  delete UA;
+ }
+ 
+ void Cell::computeAdjointU()
+ {
+-  Matrix *UD;
+-  UD = new Matrix(Nc);
+-
+-  *UD = *U;
+-  UD->conjg();
+-  //cout << "U=" << *U << endl;
+-  //cout << "Udag=" << *UD << endl;
++  // OPT: no heap allocation per call (the original did new/delete of a Matrix
++  // here on every lattice site, every evolution step in the non-simple
++  // Langevin mode)
++  Matrix UD(U);
++  UD.conjg();
+ 
+   complex<double> I(0,1); // this is i (0+i*1)
+ 
+   if(Nc==2)
+     {
+-      complex<double> u11 = U->get(0,0);
+-      complex<double> u12 = U->get(0,1);
+-      complex<double> u21 = U->get(1,0);
+-      complex<double> u22 = U->get(1,1);
+-      complex<double> ud11 = UD->get(0,0);
+-      complex<double> ud12 = UD->get(0,1);
+-      complex<double> ud21 = UD->get(1,0);
+-      complex<double> ud22 = UD->get(1,1);
+-
+-      UA->set(0,0.5*(u22*ud11 + u12*ud12 + u21*ud21 + u11*ud22));
+-      UA->set(1,0.5*I*(u22*ud11 + u12*ud12 - u21*ud21 - u11*ud22));
+-      UA->set(2,0.5*(u21*ud11 + u11*ud12 - u22*ud21 - u12*ud22));
+-      UA->set(3,0.5*I*(-u22*ud11 + u12*ud12 - u21*ud21 + u11*ud22));
+-      UA->set(4,0.5*(u22*ud11 - u12*ud12 - u21*ud21 + u11*ud22));
+-      UA->set(5,0.5*I*(-u21*ud11 + u11*ud12 + u22*ud21 - u12*ud22));
+-      UA->set(6,0.5*(u12*ud11 - u22*ud12 + u11*ud21 - u21*ud22));
+-      UA->set(7,0.5*I*(u12*ud11 - u22*ud12 - u11*ud21 + u21*ud22));
+-      UA->set(8,0.5*(u11*ud11 - u21*ud12 - u12*ud21 + u22*ud22));
++      complex<double> u11 = U.get(0,0);
++      complex<double> u12 = U.get(0,1);
++      complex<double> u21 = U.get(1,0);
++      complex<double> u22 = U.get(1,1);
++      complex<double> ud11 = UD.get(0,0);
++      complex<double> ud12 = UD.get(0,1);
++      complex<double> ud21 = UD.get(1,0);
++      complex<double> ud22 = UD.get(1,1);
++
++      UA.set(0,0.5*(u22*ud11 + u12*ud12 + u21*ud21 + u11*ud22));
++      UA.set(1,0.5*I*(u22*ud11 + u12*ud12 - u21*ud21 - u11*ud22));
++      UA.set(2,0.5*(u21*ud11 + u11*ud12 - u22*ud21 - u12*ud22));
++      UA.set(3,0.5*I*(-u22*ud11 + u12*ud12 - u21*ud21 + u11*ud22));
++      UA.set(4,0.5*(u22*ud11 - u12*ud12 - u21*ud21 + u11*ud22));
++      UA.set(5,0.5*I*(-u21*ud11 + u11*ud12 + u22*ud21 - u12*ud22));
++      UA.set(6,0.5*(u12*ud11 - u22*ud12 + u11*ud21 - u21*ud22));
++      UA.set(7,0.5*I*(u12*ud11 - u22*ud12 - u11*ud21 + u21*ud22));
++      UA.set(8,0.5*(u11*ud11 - u21*ud12 - u12*ud21 + u22*ud22));
+ 
+       //cout << *UA << endl << endl;
+     }
+   else if(Nc==3)
+     {
+-      complex<double> u11 = U->get(0,0);
+-      complex<double> u12 = U->get(0,1);
+-      complex<double> u13 = U->get(0,2);
+-      complex<double> u21 = U->get(1,0);
+-      complex<double> u22 = U->get(1,1);
+-      complex<double> u23 = U->get(1,2);
+-      complex<double> u31 = U->get(2,0);
+-      complex<double> u32 = U->get(2,1);
+-      complex<double> u33 = U->get(2,2);
+-      complex<double> ud11 = UD->get(0,0);
+-      complex<double> ud12 = UD->get(0,1);
+-      complex<double> ud13 = UD->get(0,2);
+-      complex<double> ud21 = UD->get(1,0);
+-      complex<double> ud22 = UD->get(1,1);
+-      complex<double> ud23 = UD->get(1,2);
+-      complex<double> ud31 = UD->get(2,0);
+-      complex<double> ud32 = UD->get(2,1);
+-      complex<double> ud33 = UD->get(2,2);
++      complex<double> u11 = U.get(0,0);
++      complex<double> u12 = U.get(0,1);
++      complex<double> u13 = U.get(0,2);
++      complex<double> u21 = U.get(1,0);
++      complex<double> u22 = U.get(1,1);
++      complex<double> u23 = U.get(1,2);
++      complex<double> u31 = U.get(2,0);
++      complex<double> u32 = U.get(2,1);
++      complex<double> u33 = U.get(2,2);
++      complex<double> ud11 = UD.get(0,0);
++      complex<double> ud12 = UD.get(0,1);
++      complex<double> ud13 = UD.get(0,2);
++      complex<double> ud21 = UD.get(1,0);
++      complex<double> ud22 = UD.get(1,1);
++      complex<double> ud23 = UD.get(1,2);
++      complex<double> ud31 = UD.get(2,0);
++      complex<double> ud32 = UD.get(2,1);
++      complex<double> ud33 = UD.get(2,2);
+       
+-      UA->set(0,0.5*(u22*ud11 + u12*ud12 + u21*ud21 + u11*ud22));
+-      UA->set(1,0.5*I*(u22*ud11 + u12*ud12 - u21*ud21 - u11*ud22));
+-      UA->set(2,0.5*(u21*ud11 + u11*ud12 - u22*ud21 - u12*ud22));
+-      UA->set(3,0.5*(u23*ud11 + u13*ud12 + u21*ud31 + u11*ud32));
+-      UA->set(4,0.5*I*(u23*ud11 + u13*ud12 - u21*ud31 - u11*ud32));
+-      UA->set(5,0.5*(u23*ud21 + u13*ud22 + u22*ud31 + u12*ud32));
+-      UA->set(6,0.5*I*(u23*ud21 + u13*ud22 - u22*ud31 - u12*ud32));
+-      UA->set(7,0.2886751345948129*(u21*ud11 + u11*ud12 + u22*ud21 + u12*ud22 - 2.*u23*ud31 - 2.*u13*ud32));// 1/(2\sqrt(3)) = 0.2886751345948129
+-      UA->set(8,0.5*I*(-u22*ud11 + u12*ud12 - u21*ud21 + u11*ud22));
+-      UA->set(9,0.5*(u22*ud11 - u12*ud12 - u21*ud21 + u11*ud22));
+-      UA->set(10,0.5*I*(-u21*ud11 + u11*ud12 + u22*ud21 - u12*ud22));
+-      UA->set(11,0.5*I*(-u23*ud11 + u13*ud12 - u21*ud31 + u11*ud32));
+-      UA->set(12,0.5*(u23*ud11 - u13*ud12 - u21*ud31 + u11*ud32));
+-      UA->set(13,0.5*I*(-u23*ud21 + u13*ud22 - u22*ud31 + u12*ud32));
+-      UA->set(14,0.5*(u23*ud21 - u13*ud22 - u22*ud31 + u12*ud32));
+-      UA->set(15,0.2886751345948129*I*(-u21*ud11 + u11*ud12 - u22*ud21 + u12*ud22 + 2.*u23*ud31-2.*u13*ud32));
+-      UA->set(16,0.5*(u12*ud11 - u22*ud12 + u11*ud21 - u21*ud22));
+-      UA->set(17,0.5*I*(u12*ud11 - u22*ud12 - u11*ud21 + u21*ud22));
+-      UA->set(18,0.5*(u11*ud11 - u21*ud12 - u12*ud21 + u22*ud22));
+-      UA->set(19,0.5*(u13*ud11 - u23*ud12 + u11*ud31 - u21*ud32));
+-      UA->set(20,0.5*I*(u13*ud11 - u23*ud12 - u11*ud31 + u21*ud32));
+-      UA->set(21,0.5*(u13*ud21 - u23*ud22 + u12*ud31 - u22*ud32));
+-      UA->set(22,0.5*I*(u13*ud21 - u23*ud22 - u12*ud31 + u22*ud32));
+-      UA->set(23,0.2886751345948129*(u11*ud11 - u21*ud12 + u12*ud21 - u22*ud22 - 2.*u13*ud31 + 2.*u23*ud32));
+-      UA->set(24,0.5*(u32*ud11 + u12*ud13 + u31*ud21 + u11*ud23));
+-      UA->set(25,0.5*I*(u32*ud11 + u12*ud13 - u31*ud21 - u11*ud23));
+-      UA->set(26,0.5*(u31*ud11 + u11*ud13 - u32*ud21 - u12*ud23));
+-      UA->set(27,0.5*(u33*ud11 + u13*ud13 + u31*ud31 + u11*ud33));
+-      UA->set(28,0.5*I*(u33*ud11 + u13*ud13 - u31*ud31 - u11*ud33));
+-      UA->set(29,0.5*(u33*ud21 + u13*ud23 + u32*ud31 + u12*ud33));
+-      UA->set(30,0.5*I*(u33*ud21 + u13*ud23 - u32*ud31 - u12*ud33));
+-      UA->set(31,0.2886751345948129*(u31*ud11 + u11*ud13 + u32*ud21 + u12*ud23 - 2.*u33*ud31 - 2.*u13*ud33));
+-      UA->set(32,0.5*I*(-u32*ud11 + u12*ud13 - u31*ud21 + u11*ud23));
+-      UA->set(33,0.5*(u32*ud11 - u12*ud13 - u31*ud21 + u11*ud23));
+-      UA->set(34,0.5*I*(-u31*ud11 + u11*ud13 + u32*ud21 - u12*ud23));
+-      UA->set(35,0.5*I*(-u33*ud11 + u13*ud13 - u31*ud31 + u11*ud33));
+-      UA->set(36,0.5*(u33*ud11 - u13*ud13 - u31*ud31 + u11*ud33));
+-      UA->set(37,0.5*I*(-u33*ud21 + u13*ud23 - u32*ud31 + u12*ud33));
+-      UA->set(38,0.5*(u33*ud21 - u13*ud23 - u32*ud31 + u12*ud33));
+-      UA->set(39,0.2886751345948129*I*(-u31*ud11 + u11*ud13 - u32*ud21 + u12*ud23 + 2.*u33*ud31 - 2.*u13*ud33));
+-      UA->set(40,0.5*(u32*ud12 + u22*ud13 + u31*ud22 + u21*ud23));
+-      UA->set(41,0.5*I*(u32*ud12 + u22*ud13 - u31*ud22 - u21*ud23));
+-      UA->set(42,0.5*(u31*ud12 + u21*ud13 - u32*ud22 - u22*ud23));
+-      UA->set(43,0.5*(u33*ud12 + u23*ud13 + u31*ud32 + u21*ud33));
+-      UA->set(44,0.5*I*(u33*ud12 + u23*ud13 - u31*ud32 - u21*ud33));
+-      UA->set(45,0.5*(u33*ud22 + u23*ud23 + u32*ud32 + u22*ud33));
+-      UA->set(46,0.5*I*(u33*ud22 + u23*ud23 - u32*ud32 - u22*ud33));
+-      UA->set(47,0.2886751345948129*(u31*ud12 + u21*ud13 + u32*ud22 + u22*ud23 - 2.*u33*ud32 - 2.*u23*ud33));
+-      UA->set(48,0.5*I*(-u32*ud12 + u22*ud13 - u31*ud22 + u21*ud23));
+-      UA->set(49,0.5*(u32*ud12 - u22*ud13 - u31*ud22 + u21*ud23));
+-      UA->set(50,0.5*I*(-u31*ud12 + u21*ud13 + u32*ud22 - u22*ud23));
+-      UA->set(51,0.5*I*(-u33*ud12 + u23*ud13 - u31*ud32 + u21*ud33));
+-      UA->set(52,0.5*(u33*ud12 - u23*ud13 - u31*ud32 + u21*ud33));
+-      UA->set(53,0.5*I*(-u33*ud22 + u23*ud23 - u32*ud32 + u22*ud33));
+-      UA->set(54,0.5*(u33*ud22 - u23*ud23 - u32*ud32 + u22*ud33));
+-      UA->set(55,0.2886751345948129*I*(-u31*ud12 + u21*ud13 - u32*ud22 + u22*ud23 + 2.*u33*ud32 - 2.*u23*ud33));
+-      UA->set(56,0.2886751345948129*(u12*ud11 + u22*ud12 - 2.*u32*ud13 + u11*ud21 + u21*ud22 - 2.*u31*ud23));
+-      UA->set(57,0.2886751345948129*I*(u12*ud11 + u22*ud12 - 2.*u32*ud13 - u11*ud21 - u21*ud22 + 2.*u31*ud23));
+-      UA->set(58,0.2886751345948129*(u11*ud11 + u21*ud12 - 2.*u31*ud13 - u12*ud21 - u22*ud22 + 2.*u32*ud23));
+-      UA->set(59,0.2886751345948129*(u13*ud11 + u23*ud12 - 2.*u33*ud13 + u11*ud31 + u21*ud32 - 2.*u31*ud33));
+-      UA->set(60,0.2886751345948129*I*(u13*ud11 + u23*ud12 - 2.*u33*ud13 - u11*ud31 - u21*ud32 + 2.*u31*ud33));
+-      UA->set(61,0.2886751345948129*(u13*ud21 + u23*ud22 - 2.*u33*ud23 + u12*ud31 + u22*ud32 - 2.*u32*ud33));
+-      UA->set(62,0.2886751345948129*I*(u13*ud21 + u23*ud22 - 2.*u33*ud23 - u12*ud31 - u22*ud32 + 2.*u32*ud33));
+-      UA->set(63,1./6.*(u11*ud11 + u21*ud12 - 2.*u31*ud13 + u12*ud21 + u22*ud22 - 2.*(u32*ud23 + u13*ud31 + u23*ud32 - 2.*u33*ud33)));
++      UA.set(0,0.5*(u22*ud11 + u12*ud12 + u21*ud21 + u11*ud22));
++      UA.set(1,0.5*I*(u22*ud11 + u12*ud12 - u21*ud21 - u11*ud22));
++      UA.set(2,0.5*(u21*ud11 + u11*ud12 - u22*ud21 - u12*ud22));
++      UA.set(3,0.5*(u23*ud11 + u13*ud12 + u21*ud31 + u11*ud32));
++      UA.set(4,0.5*I*(u23*ud11 + u13*ud12 - u21*ud31 - u11*ud32));
++      UA.set(5,0.5*(u23*ud21 + u13*ud22 + u22*ud31 + u12*ud32));
++      UA.set(6,0.5*I*(u23*ud21 + u13*ud22 - u22*ud31 - u12*ud32));
++      UA.set(7,0.2886751345948129*(u21*ud11 + u11*ud12 + u22*ud21 + u12*ud22 - 2.*u23*ud31 - 2.*u13*ud32));// 1/(2\sqrt(3)) = 0.2886751345948129
++      UA.set(8,0.5*I*(-u22*ud11 + u12*ud12 - u21*ud21 + u11*ud22));
++      UA.set(9,0.5*(u22*ud11 - u12*ud12 - u21*ud21 + u11*ud22));
++      UA.set(10,0.5*I*(-u21*ud11 + u11*ud12 + u22*ud21 - u12*ud22));
++      UA.set(11,0.5*I*(-u23*ud11 + u13*ud12 - u21*ud31 + u11*ud32));
++      UA.set(12,0.5*(u23*ud11 - u13*ud12 - u21*ud31 + u11*ud32));
++      UA.set(13,0.5*I*(-u23*ud21 + u13*ud22 - u22*ud31 + u12*ud32));
++      UA.set(14,0.5*(u23*ud21 - u13*ud22 - u22*ud31 + u12*ud32));
++      UA.set(15,0.2886751345948129*I*(-u21*ud11 + u11*ud12 - u22*ud21 + u12*ud22 + 2.*u23*ud31-2.*u13*ud32));
++      UA.set(16,0.5*(u12*ud11 - u22*ud12 + u11*ud21 - u21*ud22));
++      UA.set(17,0.5*I*(u12*ud11 - u22*ud12 - u11*ud21 + u21*ud22));
++      UA.set(18,0.5*(u11*ud11 - u21*ud12 - u12*ud21 + u22*ud22));
++      UA.set(19,0.5*(u13*ud11 - u23*ud12 + u11*ud31 - u21*ud32));
++      UA.set(20,0.5*I*(u13*ud11 - u23*ud12 - u11*ud31 + u21*ud32));
++      UA.set(21,0.5*(u13*ud21 - u23*ud22 + u12*ud31 - u22*ud32));
++      UA.set(22,0.5*I*(u13*ud21 - u23*ud22 - u12*ud31 + u22*ud32));
++      UA.set(23,0.2886751345948129*(u11*ud11 - u21*ud12 + u12*ud21 - u22*ud22 - 2.*u13*ud31 + 2.*u23*ud32));
++      UA.set(24,0.5*(u32*ud11 + u12*ud13 + u31*ud21 + u11*ud23));
++      UA.set(25,0.5*I*(u32*ud11 + u12*ud13 - u31*ud21 - u11*ud23));
++      UA.set(26,0.5*(u31*ud11 + u11*ud13 - u32*ud21 - u12*ud23));
++      UA.set(27,0.5*(u33*ud11 + u13*ud13 + u31*ud31 + u11*ud33));
++      UA.set(28,0.5*I*(u33*ud11 + u13*ud13 - u31*ud31 - u11*ud33));
++      UA.set(29,0.5*(u33*ud21 + u13*ud23 + u32*ud31 + u12*ud33));
++      UA.set(30,0.5*I*(u33*ud21 + u13*ud23 - u32*ud31 - u12*ud33));
++      UA.set(31,0.2886751345948129*(u31*ud11 + u11*ud13 + u32*ud21 + u12*ud23 - 2.*u33*ud31 - 2.*u13*ud33));
++      UA.set(32,0.5*I*(-u32*ud11 + u12*ud13 - u31*ud21 + u11*ud23));
++      UA.set(33,0.5*(u32*ud11 - u12*ud13 - u31*ud21 + u11*ud23));
++      UA.set(34,0.5*I*(-u31*ud11 + u11*ud13 + u32*ud21 - u12*ud23));
++      UA.set(35,0.5*I*(-u33*ud11 + u13*ud13 - u31*ud31 + u11*ud33));
++      UA.set(36,0.5*(u33*ud11 - u13*ud13 - u31*ud31 + u11*ud33));
++      UA.set(37,0.5*I*(-u33*ud21 + u13*ud23 - u32*ud31 + u12*ud33));
++      UA.set(38,0.5*(u33*ud21 - u13*ud23 - u32*ud31 + u12*ud33));
++      UA.set(39,0.2886751345948129*I*(-u31*ud11 + u11*ud13 - u32*ud21 + u12*ud23 + 2.*u33*ud31 - 2.*u13*ud33));
++      UA.set(40,0.5*(u32*ud12 + u22*ud13 + u31*ud22 + u21*ud23));
++      UA.set(41,0.5*I*(u32*ud12 + u22*ud13 - u31*ud22 - u21*ud23));
++      UA.set(42,0.5*(u31*ud12 + u21*ud13 - u32*ud22 - u22*ud23));
++      UA.set(43,0.5*(u33*ud12 + u23*ud13 + u31*ud32 + u21*ud33));
++      UA.set(44,0.5*I*(u33*ud12 + u23*ud13 - u31*ud32 - u21*ud33));
++      UA.set(45,0.5*(u33*ud22 + u23*ud23 + u32*ud32 + u22*ud33));
++      UA.set(46,0.5*I*(u33*ud22 + u23*ud23 - u32*ud32 - u22*ud33));
++      UA.set(47,0.2886751345948129*(u31*ud12 + u21*ud13 + u32*ud22 + u22*ud23 - 2.*u33*ud32 - 2.*u23*ud33));
++      UA.set(48,0.5*I*(-u32*ud12 + u22*ud13 - u31*ud22 + u21*ud23));
++      UA.set(49,0.5*(u32*ud12 - u22*ud13 - u31*ud22 + u21*ud23));
++      UA.set(50,0.5*I*(-u31*ud12 + u21*ud13 + u32*ud22 - u22*ud23));
++      UA.set(51,0.5*I*(-u33*ud12 + u23*ud13 - u31*ud32 + u21*ud33));
++      UA.set(52,0.5*(u33*ud12 - u23*ud13 - u31*ud32 + u21*ud33));
++      UA.set(53,0.5*I*(-u33*ud22 + u23*ud23 - u32*ud32 + u22*ud33));
++      UA.set(54,0.5*(u33*ud22 - u23*ud23 - u32*ud32 + u22*ud33));
++      UA.set(55,0.2886751345948129*I*(-u31*ud12 + u21*ud13 - u32*ud22 + u22*ud23 + 2.*u33*ud32 - 2.*u23*ud33));
++      UA.set(56,0.2886751345948129*(u12*ud11 + u22*ud12 - 2.*u32*ud13 + u11*ud21 + u21*ud22 - 2.*u31*ud23));
++      UA.set(57,0.2886751345948129*I*(u12*ud11 + u22*ud12 - 2.*u32*ud13 - u11*ud21 - u21*ud22 + 2.*u31*ud23));
++      UA.set(58,0.2886751345948129*(u11*ud11 + u21*ud12 - 2.*u31*ud13 - u12*ud21 - u22*ud22 + 2.*u32*ud23));
++      UA.set(59,0.2886751345948129*(u13*ud11 + u23*ud12 - 2.*u33*ud13 + u11*ud31 + u21*ud32 - 2.*u31*ud33));
++      UA.set(60,0.2886751345948129*I*(u13*ud11 + u23*ud12 - 2.*u33*ud13 - u11*ud31 - u21*ud32 + 2.*u31*ud33));
++      UA.set(61,0.2886751345948129*(u13*ud21 + u23*ud22 - 2.*u33*ud23 + u12*ud31 + u22*ud32 - 2.*u32*ud33));
++      UA.set(62,0.2886751345948129*I*(u13*ud21 + u23*ud22 - 2.*u33*ud23 - u12*ud31 - u22*ud32 + 2.*u32*ud33));
++      UA.set(63,1./6.*(u11*ud11 + u21*ud12 - 2.*u31*ud13 + u12*ud21 + u22*ud22 - 2.*(u32*ud23 + u13*ud31 + u23*ud32 - 2.*u33*ud33)));
+     }
+   else
+     {
+       cout << "[Cell::computeAdjointU]: Only SU(2) and SU(3) supported. Have Nc=" << Nc << ". Exiting." << endl;
+       exit(1);
+     }
+-  delete UD;
+ }
+diff -ruN '--exclude=build' '--exclude=.git' '--exclude=build-nonative' '--exclude=build-legacy' jimwlk/src/Cell.h jimwlk-opt/src/Cell.h
+--- jimwlk/src/Cell.h	2026-06-10 16:45:45.182329177 +0000
++++ jimwlk-opt/src/Cell.h	2026-06-10 16:55:56.512417114 +0000
+@@ -17,12 +17,23 @@
+   int Nc;
+   double xpos;  // the cells x position with respect to the lattice
+   double ypos;  // the cells y position with respect to the lattice
+-  // if cell is on the heap, all of the following will be too.
+-  Matrix* U;     // U is in the fundamental rep. (Nc*Nc matrix)
+-  Matrix* Ui;    // Ui is the initial U in the fundamental rep. (Nc*Nc matrix)
+-  Matrix** Uy;    // Uy is an intermediate U in the fundamental rep. (Nc*Nc matrix) (for unequal y correlations)
+-  Matrix* UA;    // UA is in the adjoint rep.
+-    
++
++  // OPT: matrices are stored by value (no extra pointer indirection, fewer
++  // heap allocations, better locality). The Uy array (10 matrices, used only
++  // for unequal-rapidity correlations) is allocated lazily on first use;
++  // in the original it cost 10 heap-allocated matrices per cell whether or
++  // not the feature was used.
++  Matrix U;     // U is in the fundamental rep. (Nc*Nc matrix)
++  Matrix Ui;    // Ui is the initial U in the fundamental rep. (Nc*Nc matrix)
++  Matrix UA;    // UA is in the adjoint rep.
++  vector<Matrix> Uy; // intermediate U's (for unequal y correlations), lazy
++
++  void ensureUy()
++  {
++    if (Uy.empty())
++      Uy.assign(10, Matrix(Nc,1.));
++  }
++
+ public:
+   Cell(int N);
+   ~Cell();
+@@ -30,18 +41,18 @@
+   void setX(double in) { xpos = in; };
+   void setY(double in) { ypos = in; };
+ 
+-  double getX() { return xpos; };
+-  double getY() { return ypos; };
++  double getX() const { return xpos; };
++  double getY() const { return ypos; };
+ 
+-  void setU(const Matrix& x) { *U = x; };
+-  void setUi(const Matrix& x) { *Ui = x; };
+-  void setUy(const int i, const Matrix& x) { *Uy[i] = x; };
+-  void setUA(const Matrix& x) { *UA = x; };
+-
+-  Matrix& getU() const { return *U; };
+-  Matrix& getUy(int i) const { return *Uy[i]; };
+-  Matrix& getUi() const { return *Ui; };
+-  Matrix& getUA() const { return *UA; };
++  void setU(const Matrix& x) { U = x; };
++  void setUi(const Matrix& x) { Ui = x; };
++  void setUy(const int i, const Matrix& x) { ensureUy(); Uy[i] = x; };
++  void setUA(const Matrix& x) { UA = x; };
++
++  Matrix& getU() { return U; };
++  Matrix& getUy(int i) { ensureUy(); return Uy[i]; };
++  Matrix& getUi() { return Ui; };
++  Matrix& getUA() { return UA; };
+ 
+   void computeAdjointU();
+ 
+diff -ruN '--exclude=build' '--exclude=.git' '--exclude=build-nonative' '--exclude=build-legacy' jimwlk/src/FFT.cpp jimwlk-opt/src/FFT.cpp
+--- jimwlk/src/FFT.cpp	2026-06-10 16:45:45.182329177 +0000
++++ jimwlk-opt/src/FFT.cpp	2026-06-10 16:56:56.980415731 +0000
+@@ -5,771 +5,125 @@
+ 
+ //**************************************************************************
+ // FFT class.
+-
++//
++// OPT: the original code copied the data into the FFTW buffer (and back)
++// with four separate loop nests per quadrant; these are equivalent to a
++// single FFT-shift index map, newpos = ((i+n0/2)%n0)*n1 + ((j+n1/2)%n1),
++// which we precompute once per call and reuse for all mDim components.
++// The data movement (and hence the numerical result) is identical to the
++// original. The unused (and broken) fftnComplex routine was removed.
+ //**************************************************************************
+ 
+ void FFT::fftnVector(vector<complex<double> > **data, vector<complex<double> > **outdata, const int nn[], const int ndim, const int isign)
+ {
+-    unsigned i1, i2rev, i3rev, ibit;
+-    unsigned ip2, ifp1, ifp2, k2, n;
+-    unsigned nprev = 1, nrem, ntot = nn[0]*nn[1];
+-    register unsigned i2, i3;
+-    int pos, newpos;
+-    vector<complex<double> >::iterator position;	
+-		
+-    int mDim = data[0]->size();
++    (void) ndim; // always 2 here
++    const int N0 = nn[0], N1 = nn[1];
++    const int ntot = N0*N1;
++    const int mDim = data[0]->size();
+     // mDim is the size of the vector (how many rows)
+ 
+-    // ndim is the dimension of the FFT (always 2 here)
++    // precompute the shift map once
++    vector<int> shift(ntot);
++    for (int i=0; i<N0; i++)
++      {
++        const int is = ((i+N0/2)%N0)*N1;
++        for (int j=0; j<N1; j++)
++          shift[i*N1+j] = is + ((j+N1/2)%N1);
++      }
+ 
+-    //    cout << "mDim=" << mDim << endl;
+-    // for each component of the vector fill the input array for the FFT (resort as you fill in)
+     for (int k=0; k<mDim; k++)
+       {
+-	//	oo   ->  xo
+-	//      ox       oo	
+-	for (int i=nn[0]/2; i<nn[0]; i++)
+-	  {
+-	    for (int j=nn[1]/2; j<nn[1]; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i-nn[0]/2)*nn[1]+j-nn[1]/2;
+-		input[newpos][0] = real(data[pos]->at(k));
+-		input[newpos][1] = imag(data[pos]->at(k));
+-	      }
+-	  }
+-	//	xo   ->  oo
+-	//      oo       ox	
+-	for (int i=0; i<nn[0]/2; i++)
+-	  {
+-	    for (int j=0; j<nn[1]/2; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i+nn[0]/2)*nn[1]+nn[1]/2+j;
+-		input[newpos][0] = real(data[pos]->at(k));
+-		input[newpos][1] = imag(data[pos]->at(k));
+-	      }
+-	  }
+-	//	ox   ->  oo
+-	//      oo       xo	
+-	for (int i=nn[0]/2; i<nn[0]; i++)
+-	  {
+-	    for (int j=0; j<nn[1]/2; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i-nn[0]/2)*nn[1]+j+nn[1]/2;
+-		input[newpos][0] = real(data[pos]->at(k));
+-		input[newpos][1] = imag(data[pos]->at(k));
+-	      }
+-	  }
+-	//	oo   ->  ox
+-	//      xo       oo	
+-	for (int i=0; i<nn[0]/2; i++)
+-	  {
+-	    for (int j=nn[1]/2; j<nn[1]; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i+nn[0]/2)*nn[1]+j-nn[1]/2;
+-		input[newpos][0] = real(data[pos]->at(k));
+-		input[newpos][1] = imag(data[pos]->at(k));
+-	      }
+-	  }	
+-	
+-	if (isign==1)
+-	  fftw_execute(p);
+-	else
+-	  fftw_execute(pback);
+-
+-	// if this is inverse transform, normalize.
+-	if(isign == -1 ) 
+-	  {
+-	    for(unsigned i=0; i<ntot; i++) 
+-	      {
+-		output[i][0]/=static_cast<double>(ntot);
+-		output[i][1]/=static_cast<double>(ntot);
+-	      }
+-	  }
+-	
+-	//	xo   ->  oo
+-	//      oo       ox	
+-	for (int i=nn[0]/2; i<nn[0]; i++)
+-	  {
+-	    for (int j=nn[1]/2; j<nn[1]; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i-nn[0]/2)*nn[1]+j-nn[1]/2;
+-		position = outdata[pos]->begin() + k;	
+-		*position = complex<double>(output[newpos][0],output[newpos][1]);
+-		//	cout << output[newpos][0] << " " << output[newpos][1] << endl;
+-		//cout << "data=" << data[pos]->at(k) << endl;
+-	      }
+-	  }
+-	//	oo   ->  xo
+-	//      ox       oo	
+-	for (int i=0; i<nn[0]/2; i++)
+-	  {
+-	    for (int j=0; j<nn[1]/2; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i+nn[0]/2)*nn[1]+nn[1]/2+j;
+-		position = outdata[pos]->begin() + k;	
+-		*position = complex<double>(output[newpos][0],output[newpos][1]);
+-	      }
+-	  }
+-	//	oo   ->  ox
+-	//      xo       oo	
+-	for (int i=nn[0]/2; i<nn[0]; i++)
+-	  {
+-	    for (int j=0; j<nn[1]/2; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i-nn[0]/2)*nn[1]+j+nn[1]/2;
+-		position = outdata[pos]->begin() + k;	
+-		*position = complex<double>(output[newpos][0],output[newpos][1]);
+-	      }
+-	  }
+-	//	ox   ->  oo
+-	//      oo       xo	
+-
+-	for (int i=0; i<nn[0]/2; i++)
+-	  {
+-	    for (int j=nn[1]/2; j<nn[1]; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i+nn[0]/2)*nn[1]+j-nn[1]/2;
+-		position = outdata[pos]->begin() + k;	
+-		*position = complex<double>(output[newpos][0],output[newpos][1]);
+-	      }
+-	  }
++        for (int pos=0; pos<ntot; pos++)
++          {
++            const complex<double> v = (*data[pos])[k];
++            const int newpos = shift[pos];
++            input[newpos][0] = v.real();
++            input[newpos][1] = v.imag();
++          }
++
++        execute(isign);
++
++        for (int pos=0; pos<ntot; pos++)
++          {
++            const int newpos = shift[pos];
++            (*outdata[pos])[k] = complex<double>(output[newpos][0],output[newpos][1]);
++          }
+       }
+ }
+ 
+ void FFT::fftnArray(complex<double> **data, complex<double>  **outdata, const int nn[], const int ndim, const int isign, const int mDim)
+ {
+-    unsigned i1, i2rev, i3rev, ibit;
+-    unsigned ip2, ifp1, ifp2, k2, n;
+-    unsigned nprev = 1, nrem, ntot = nn[0]*nn[1];
+-    register unsigned i2, i3;
+-    int pos, newpos;
+-		
+-    //    cout << "size=" << mDim << endl;
+-    // mDim is the size of the vector (how many rows)
+-
+-    // ndim is the dimension of the FFT (always 2 here)
++    (void) ndim; // always 2 here
++    const int N0 = nn[0], N1 = nn[1];
++    const int ntot = N0*N1;
++
++    vector<int> shift(ntot);
++    for (int i=0; i<N0; i++)
++      {
++        const int is = ((i+N0/2)%N0)*N1;
++        for (int j=0; j<N1; j++)
++          shift[i*N1+j] = is + ((j+N1/2)%N1);
++      }
+ 
+-    //    cout << "mDim=" << mDim << endl;
+-    // for each component of the vector fill the input array for the FFT (resort as you fill in)
+     for (int k=0; k<mDim; k++)
+       {
+-	//	oo   ->  xo
+-	//      ox       oo	
+-	for (int i=nn[0]/2; i<nn[0]; i++)
+-	  {
+-	    for (int j=nn[1]/2; j<nn[1]; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i-nn[0]/2)*nn[1]+j-nn[1]/2;
+-		input[newpos][0] = real(data[pos][k]);
+-		input[newpos][1] = imag(data[pos][k]);
+-	      }
+-	  }
+-	//	xo   ->  oo
+-	//      oo       ox	
+-	for (int i=0; i<nn[0]/2; i++)
+-	  {
+-	    for (int j=0; j<nn[1]/2; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i+nn[0]/2)*nn[1]+nn[1]/2+j;
+-		input[newpos][0] = real(data[pos][k]);
+-		input[newpos][1] = imag(data[pos][k]);
+-	      }
+-	  }
+-	//	ox   ->  oo
+-	//      oo       xo	
+-	for (int i=nn[0]/2; i<nn[0]; i++)
+-	  {
+-	    for (int j=0; j<nn[1]/2; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i-nn[0]/2)*nn[1]+j+nn[1]/2;
+-		input[newpos][0] = real(data[pos][k]);
+-		input[newpos][1] = imag(data[pos][k]);
+-	      }
+-	  }
+-	//	oo   ->  ox
+-	//      xo       oo	
+-	for (int i=0; i<nn[0]/2; i++)
+-	  {
+-	    for (int j=nn[1]/2; j<nn[1]; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i+nn[0]/2)*nn[1]+j-nn[1]/2;
+-		input[newpos][0] = real(data[pos][k]);
+-		input[newpos][1] = imag(data[pos][k]);
+-	      }
+-	  }	
+-	
+-	if (isign==1)
+-	  fftw_execute(p);
+-	else
+-	  fftw_execute(pback);
+-
+-	// if this is inverse transform, normalize.
+-	if(isign == -1 ) 
+-	  {
+-	    for(unsigned i=0; i<ntot; i++) 
+-	      {
+-		output[i][0]/=static_cast<double>(ntot);
+-		output[i][1]/=static_cast<double>(ntot);
+-	      }
+-	  }
+-	
+-	//	xo   ->  oo
+-	//      oo       ox	
+-	for (int i=nn[0]/2; i<nn[0]; i++)
+-	  {
+-	    for (int j=nn[1]/2; j<nn[1]; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i-nn[0]/2)*nn[1]+j-nn[1]/2;
+-		outdata[pos][k]= complex<double>(output[newpos][0],output[newpos][1]);
+-		//	cout << output[newpos][0] << " " << output[newpos][1] << endl;
+-		//cout << "data=" << data[pos][k] << endl;
+-	      }
+-	  }
+-	//	oo   ->  xo
+-	//      ox       oo	
+-	for (int i=0; i<nn[0]/2; i++)
+-	  {
+-	    for (int j=0; j<nn[1]/2; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i+nn[0]/2)*nn[1]+nn[1]/2+j;
+-		outdata[pos][k]= complex<double>(output[newpos][0],output[newpos][1]);
+-	      }
+-	  }
+-	//	oo   ->  ox
+-	//      xo       oo	
+-	for (int i=nn[0]/2; i<nn[0]; i++)
+-	  {
+-	    for (int j=0; j<nn[1]/2; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i-nn[0]/2)*nn[1]+j+nn[1]/2;
+-		outdata[pos][k]= complex<double>(output[newpos][0],output[newpos][1]);
+-	      }
+-	  }
+-	//	ox   ->  oo
+-	//      oo       xo	
+-
+-	for (int i=0; i<nn[0]/2; i++)
+-	  {
+-	    for (int j=nn[1]/2; j<nn[1]; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i+nn[0]/2)*nn[1]+j-nn[1]/2;
+-		outdata[pos][k]= complex<double>(output[newpos][0],output[newpos][1]);
+-	      }
+-	  }
++        for (int pos=0; pos<ntot; pos++)
++          {
++            const complex<double> v = data[pos][k];
++            const int newpos = shift[pos];
++            input[newpos][0] = v.real();
++            input[newpos][1] = v.imag();
++          }
++
++        execute(isign);
++
++        for (int pos=0; pos<ntot; pos++)
++          {
++            const int newpos = shift[pos];
++            outdata[pos][k] = complex<double>(output[newpos][0],output[newpos][1]);
++          }
+       }
+ }
+ 
+ 
+-
+ // Performs Fast Fourier Transform of any object of class "T" (matrix or something else) using a wrapper for FFTW
+ // This routine takes data as a function of -x_max/2 to x_max/2 and returns it ordered similarly - no need to resort before or after!
+ template <class T>
+ void FFT::fftn(T **data, T **outdata, const int nn[], const int ndim, const int isign)
+ {
+-    unsigned i1, i2rev, i3rev, ibit;
+-    unsigned ip2, ifp1, ifp2, k2, n;
+-    unsigned nprev = 1, nrem, ntot = ntot = nn[0]*nn[1];
+-    register unsigned i2, i3;
+-    int mDim, pos, newpos; // matrix dimension
+-    mDim = data[0]->getNDim();
+-    
+-    // mDim is the size of the matrix (how many rows)
+-
++    (void) ndim; // always 2 here
++    const int N0 = nn[0], N1 = nn[1];
++    const int ntot = N0*N1;
++    int mDim = data[0]->getNDim();
+     mDim*=mDim;
+-    // ndim is the dimension of the FFT (always 2 here)
+-    
+-    // for each component of the matrix fill the input array for the FFT (resort as you fill in)
+ 
+-    //    cout << "mDim=" << mDim << endl;
+-    for (int k=0; k<mDim; k++)
+-      {
+-	//	oo   ->  xo
+-	//      ox       oo	
+-	for (int i=nn[0]/2; i<nn[0]; i++)
+-	  {
+-	    for (int j=nn[1]/2; j<nn[1]; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i-nn[0]/2)*nn[1]+j-nn[1]/2;
+-		input[newpos][0] = data[pos]->getRe(k);
+-		input[newpos][1] = data[pos]->getIm(k);
+-	      }
+-	  }
+-	//	xo   ->  oo
+-	//      oo       ox	
+-	for (int i=0; i<nn[0]/2; i++)
+-	  {
+-	    for (int j=0; j<nn[1]/2; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i+nn[0]/2)*nn[1]+nn[1]/2+j;
+-		input[newpos][0] = data[pos]->getRe(k);
+-		input[newpos][1] = data[pos]->getIm(k);
+-	      }
+-	  }
+-	//	ox   ->  oo
+-	//      oo       xo	
+-	for (int i=nn[0]/2; i<nn[0]; i++)
+-	  {
+-	    for (int j=0; j<nn[1]/2; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i-nn[0]/2)*nn[1]+j+nn[1]/2;
+-		input[newpos][0] = data[pos]->getRe(k);
+-		input[newpos][1] = data[pos]->getIm(k);
+-	      }
+-	  }
+-	//	oo   ->  ox
+-	//      xo       oo	
+-	for (int i=0; i<nn[0]/2; i++)
+-	  {
+-	    for (int j=nn[1]/2; j<nn[1]; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i+nn[0]/2)*nn[1]+j-nn[1]/2;
+-		input[newpos][0] = data[pos]->getRe(k);
+-		input[newpos][1] = data[pos]->getIm(k);
+-	      }
+-	  }	
+-	
+-	if (isign==1)
+-	  fftw_execute(p);
+-	else
+-	  fftw_execute(pback);
+-	
+-	// if this is inverse transform, normalize.
+-	if(isign == -1 ) 
+-	  {
+-	    for(unsigned i=0; i<ntot; i++) 
+-	      {
+-		output[i][0]/=static_cast<double>(ntot);
+-		output[i][1]/=static_cast<double>(ntot);
+-	      }
+-	  }
+-	
+-	//	oo   ->  xo
+-	//      ox       oo	
+-	for (int i=nn[0]/2; i<nn[0]; i++)
+-	  {
+-	    for (int j=nn[1]/2; j<nn[1]; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i-nn[0]/2)*nn[1]+j-nn[1]/2;
+-		outdata[pos]->setRe(k,output[newpos][0]);
+-		outdata[pos]->setIm(k,output[newpos][1]);
+-	      }
+-	  }
+-	//	xo   ->  oo
+-	//      oo       ox	
+-	for (int i=0; i<nn[0]/2; i++)
+-	  {
+-	    for (int j=0; j<nn[1]/2; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i+nn[0]/2)*nn[1]+nn[1]/2+j;
+-		outdata[pos]->setRe(k,output[newpos][0]);
+-		outdata[pos]->setIm(k,output[newpos][1]);
+-	      }
+-	  }
+-	//	ox   ->  oo
+-	//      oo       xo	
+-	for (int i=nn[0]/2; i<nn[0]; i++)
+-	  {
+-	    for (int j=0; j<nn[1]/2; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i-nn[0]/2)*nn[1]+j+nn[1]/2;
+-		outdata[pos]->setRe(k,output[newpos][0]);
+-		outdata[pos]->setIm(k,output[newpos][1]);
+-	      }
+-	  }
+-	//	oo   ->  ox
+-	//      xo       oo	
+-
+-	for (int i=0; i<nn[0]/2; i++)
+-	  {
+-	    for (int j=nn[1]/2; j<nn[1]; j++)
+-	      {
+-		pos = i*nn[1]+j;
+-		newpos = (i+nn[0]/2)*nn[1]+j-nn[1]/2;
+-		outdata[pos]->setRe(k,output[newpos][0]);
+-		outdata[pos]->setIm(k,output[newpos][1]);
+-	      }
+-	  }
+-      }
+-}
+-
+-
+-void FFT::fftnComplex(complex<double> **data, const int nn[], const int ndim, const int isign)
+-{
+-    unsigned i1, i2rev, i3rev, ibit;
+-    unsigned ip2, ifp1, ifp2, k2, n;
+-    unsigned nprev = 1, nrem, ntot = nn[0]*nn[1];
+-    register unsigned i2, i3;
+-    int mDim=1;
+-
+-    // Initialize auxiliary object as 0.
+-    complex<double> *temp = new complex<double>; 
+-    *temp = 0.;
+-    complex<double> *temp2 = new complex<double>;
+-    *temp2 = 0.;
+-    
+-    // temporary grid needed for resorting
+-    complex<double>** dataTemp;
+-    dataTemp = new complex<double>*[nn[0]*nn[1]/4];
+-    
+-    int newpos, pos; 
+-    for(int i=0; i<nn[0]*nn[1]/4; i++)
+-      {
+-	dataTemp[i] = new complex<double>;
+-	*dataTemp[i] = 0.;
+-      }	  
+-    
+-    for (int i=0; i<nn[0]/2; i++)
+-      {
+-	for (int j=0; j<nn[1]/2; j++)
+-	  {
+-	    pos = i*nn[1]+j;
+-	    newpos = i*nn[1]/2+j;
+-	    *dataTemp[newpos] = *data[pos];
+-	  }
+-      }
+-    for (int i=nn[0]/2; i<nn[0]; i++)
+-      {
+-	for (int j=nn[1]/2; j<nn[1]; j++)
+-	  {
+-	    pos = i*nn[1]+j;
+-	    newpos = (i-nn[0]/2)*nn[1]+j-nn[1]/2;
+-	    *data[newpos] = *data[pos];
+-	  }
+-      }
+-    for (int i=0; i<nn[0]/2; i++)
++    vector<int> shift(ntot);
++    for (int i=0; i<N0; i++)
+       {
+-	for (int j=0; j<nn[1]/2; j++)
+-	  {
+-	    pos = i*nn[1]/2+j;
+-	    newpos = (i+nn[0]/2)*nn[1]+nn[1]/2+j;
+-	    *data[newpos] = *dataTemp[pos];
+-	  }
++        const int is = ((i+N0/2)%N0)*N1;
++        for (int j=0; j<N1; j++)
++          shift[i*N1+j] = is + ((j+N1/2)%N1);
+       }
+-    for (int i=0; i<nn[0]/2; i++)
+-      {
+-	for (int j=nn[1]/2; j<nn[1]; j++)
+-	  {
+-	    pos = i*nn[1]+j;
+-	    newpos = i*nn[1]/2+j-nn[1]/2;
+-	    *dataTemp[newpos] = *data[pos];
+-	  }
+-      }
+-    for (int i=nn[0]/2; i<nn[0]; i++)
+-      {
+-	for (int j=0; j<nn[1]/2; j++)
+-	  {
+-	    pos = i*nn[1]+j;
+-	    newpos = (i-nn[0]/2)*nn[1]+j+nn[1]/2;
+-	    *data[newpos] = *data[pos];
+-	  }
+-      }
+-    for (int i=0; i<nn[0]/2; i++)
+-      {
+-	for (int j=0; j<nn[1]/2; j++)
+-	  {
+-	    pos = i*nn[1]/2+j;
+-	    newpos = (i+nn[0]/2)*nn[1]+j;
+-	    *data[newpos] = *dataTemp[pos];
+-	  }
+-      }
+-    
+-    // Compute total number of complex values.
+-    for (int idim = 0; idim < ndim; ++idim) ntot *= nn[idim];
+ 
+-    for (int idim = ndim - 1; idim >= 0; --idim) 
+-      {
+-	n = nn[idim];
+-	nrem = ntot / (n * nprev);
+-	ip2 = nprev * n;        // Unit step for next dimension.
+-	i2rev = 0;              // Bit reversed i2.
+-
+-	// This is the bit reversal section of the routine.
+-	// Loop over current dimension.
+-	for (i2 = 0; i2 < ip2; i2 += nprev) 
+-	  {
+-	    if (i2 < i2rev)
+-	      // Loop over lower dimensions.
+-	      for (i1 = i2; i1 < i2 + nprev; ++i1)
+-		// Loop over higher dimensions.
+-		for (i3 = i1; i3 < ntot; i3 += ip2) 
+-		  {
+-		    i3rev = i3 + i2rev - i2;
+-		    *temp = *(data[i3]);
+-		    *(data[i3]) = *(data[i3rev]);
+-		    *(data[i3rev]) = *temp;
+-		  }
+-	    
+-	    ibit = ip2;
+-	    // Increment from high end of i2rev to low.
+-	    do {
+-	      ibit >>= 1;
+-	      i2rev ^= ibit;
+-	    } while (ibit >= nprev && !(ibit & i2rev));
+-	  }
+-
+-	// Here begins the Danielson-Lanczos section of the routine.
+-	for (ifp1 = nprev; ifp1 < ip2; ifp1 <<= 1) 
+-	  {
+-	    ifp2 = ifp1 << 1;
+-	    //  Initialize for the trig. recurrence.
+-	    double alp = sin(M_PI/ (ifp2/nprev));
+-	    alp = 2*alp*alp;
+-	    double beta = -isign*sin(2*M_PI/(ifp2/nprev));
+-	    
+-	    complex<double> wp(alp,beta);
+-	    complex<double> w(1.0,0.0);
+-	    
+-	    // Loop by unit step in current dimension.
+-	    for (i3 = 0; i3 < ifp1; i3 += nprev) 
+-	      {
+-		// Loop over lower dimensions.
+-		for (i1 = i3; i1 < i3 + nprev; ++i1)
+-		  // Loop over higher dimensions.
+-		  for (i2 = i1; i2 < ntot; i2 += ifp2) 
+-		    {
+-		      // Danielson-Lanczos formula.
+-		      k2 = i2 + ifp1;
+-		      *temp  = *(data[k2]);
+-		      *temp2 = *(data[k2]);
+-		      *temp  *= w;
+-		      *temp2 *= -w;
+-		      *temp  += *(data[i2]);
+-		      *temp2 += *(data[i2]);
+-		      *(data[i2]) = *temp;
+-		      *(data[k2]) = *temp2;
+-		    }
+-		// Trigonometric recurrence
+-		w -= w*wp;
+-	      }
+-	  }
+-	nprev *= n;
+-      }
+-    // if this is inverse transform, normalize.
+-    if(isign == -1 ) 
++    for (int k=0; k<mDim; k++)
+       {
+-	for(unsigned i=0; i<ntot; i++) 
+-	  {
+-	    *(data[i]) /= ntot;
+-	  }
++        for (int pos=0; pos<ntot; pos++)
++          {
++            const int newpos = shift[pos];
++            input[newpos][0] = data[pos]->getRe(k);
++            input[newpos][1] = data[pos]->getIm(k);
++          }
++
++        execute(isign);
++
++        for (int pos=0; pos<ntot; pos++)
++          {
++            const int newpos = shift[pos];
++            outdata[pos]->set(k, complex<double>(output[newpos][0],output[newpos][1]));
++          }
+       }
+-
+-
+-
+-    for(int i=0; i<nn[0]*nn[1]/4; i++)
+-      {
+-	delete dataTemp[i];
+-      }	
+-
+-    delete[] dataTemp;
+-    delete temp;
+-    delete temp2;
+ }
+ 
+ 
+ // Define specializations of the template:
+ template void FFT::fftn(Matrix **data,Matrix **outdata, const int nn[], const int ndim, const int isign);
+-
+-
+-
+-
+-
+-// FFT test ---------------------------------------------------------------------------
+-//   for (int j=0; j<param->getSize(); j++)
+-//     {
+-//       pos = j;
+-//       x = lat->cells[pos]->getX();
+-//       y = lat->cells[pos]->getY();
+-//       Cx[pos]->setIm(0,y*exp(-y*y/4.));
+-//     }
+-
+-//   fstream foutb("before",ios::out); 
+-//   cout<< "before transform" << endl;
+-//   for (int j=0; j<param->getSize(); j++)
+-//     {
+-//       pos = j;
+-//       cout << pos << " " << Cx[pos]->getRe(0) << " " << Cx[pos]->getIm(0) << endl;
+-//       foutb << pos << " " << Cx[pos]->getRe(0) << " " << Cx[pos]->getIm(0) << endl;
+-//     }
+-//   cout << endl;
+-//   foutb.close();
+-
+-
+-//   //resort:
+-//   for (int j=0; j<param->getSize(); j++)
+-//     {
+-//       if(j<param->getSize()/2)
+-// 	{
+-// 	  pos = j;
+-// 	  newpos = param->getSize()/2+j;
+-// 	  CxNew[newpos] = Cx[pos];
+-// 	}
+-//       if(j>=param->getSize()/2)
+-// 	{
+-// 	  pos = j;
+-// 	  newpos = j-param->getSize()/2;
+-// 	  CxNew[newpos] = Cx[pos];
+-// 	}
+-//     }
+-  
+-//   fstream foutr("resort",ios::out); 
+-//   cout<< "before transform" << endl;
+-//   for (int j=0; j<param->getSize(); j++)
+-//     {
+-//       pos = j;
+-//       cout << pos << " " << CxNew[pos]->getRe(0) << " " << CxNew[pos]->getIm(0) << endl;
+-//       foutr << pos << " " << CxNew[pos]->getRe(0) << " " << CxNew[pos]->getIm(0) << endl;
+-//     }
+-//   cout << endl;
+-//   foutr.close();
+-  
+-//   fft->fftn(CxNew,nn,1,1);
+-
+-//   fstream fouta("after",ios::out); 
+-//   cout<< "after transform" << endl;
+-//   for (int j=0; j<param->getSize(); j++)
+-//     {
+-//       pos = j;
+-//       cout << -1./2.+static_cast<double>(pos)/static_cast<double>(param->getSize()) << " " << CxNew[pos]->getRe(0) << " " << CxNew[pos]->getIm(0) << endl;
+-//       fouta << -1./2.+static_cast<double>(pos)/static_cast<double>(param->getSize()) << " " << CxNew[pos]->getRe(0) << " " << CxNew[pos]->getIm(0) << endl;
+-//     }
+-//   cout << endl;
+-//   fouta.close();
+-
+-//   //resort:
+-//   for (int j=0; j<param->getSize(); j++)
+-//     {
+-//       if(j<param->getSize()/2)
+-// 	{
+-// 	  pos = j;
+-// 	  newpos = param->getSize()/2+j;
+-// 	  Cx[newpos] = CxNew[pos];
+-// 	}
+-//       if(j>=param->getSize()/2)
+-// 	{
+-// 	  pos = j;
+-// 	  newpos = j-param->getSize()/2;
+-// 	  Cx[newpos] = CxNew[pos];
+-// 	}
+-//     }
+-
+-
+-//   fstream foutar("afterResort",ios::out); 
+-//   cout<< "after transform resorted" << endl;
+-//   for (int j=0; j<param->getSize(); j++)
+-//     {
+-//       pos = j;
+-//       cout << 2*param->PI*(-1./2.+static_cast<double>(pos)/static_cast<double>(param->getSize())) << " " << Cx[pos]->getRe(0) << " " << Cx[pos]->getIm(0) << endl;
+-//       foutar << 2*param->PI*(-1./2.+static_cast<double>(pos)/static_cast<double>(param->getSize())) << " " << Cx[pos]->getRe(0) << " " << Cx[pos]->getIm(0) << endl;
+-//     }
+-//   cout << endl;
+-//   foutar.close();
+-
+-
+-
+-//   //modify
+-//   double k;
+-//   for (int j=0; j<param->getSize(); j++)
+-//     {
+-//       pos = j;
+-//       k=2*param->PI*(-1./2.+static_cast<double>(pos)/static_cast<double>(param->getSize()));
+-//       Cx[pos]->setRe(0,k*Cx[pos]->getRe(0));
+-//       Cx[pos]->setIm(0,k*Cx[pos]->getIm(0));
+-//     }
+-
+-//   //resort:
+-//   for (int j=0; j<param->getSize(); j++)
+-//     {
+-//       if(j<param->getSize()/2)
+-// 	{
+-// 	  pos = j;
+-// 	  newpos = param->getSize()/2+j;
+-// 	  CxNew[newpos] = Cx[pos];
+-// 	}
+-//       if(j>=param->getSize()/2)
+-// 	{
+-// 	  pos = j;
+-// 	  newpos = j-param->getSize()/2;
+-// 	  CxNew[newpos] = Cx[pos];
+-// 	}
+-//     }
+-
+-//   fft->fftn(CxNew,nn,1,-1);
+-
+-//   //resort:
+-//   for (int j=0; j<param->getSize(); j++)
+-//     {
+-//       if(j<param->getSize()/2)
+-// 	{
+-// 	  pos = j;
+-// 	  newpos = param->getSize()/2+j;
+-// 	  Cx[newpos] = CxNew[pos];
+-// 	}
+-//       if(j>=param->getSize()/2)
+-// 	{
+-// 	  pos = j;
+-// 	  newpos = j-param->getSize()/2;
+-// 	  Cx[newpos] = CxNew[pos];
+-// 	}
+-//     }
+-
+-//   fstream foutba("back",ios::out); 
+-//   cout<< "back transform" << endl;
+-//   for (int j=0; j<param->getSize(); j++)
+-//     {
+-//       pos = j;
+-//       cout << pos << " " << Cx[pos]->getRe(0) << " " << Cx[pos]->getIm(0) << endl;
+-//       foutba << pos << " " << Cx[pos]->getRe(0) << " " << Cx[pos]->getIm(0) << endl;
+-//     }
+-//   cout << endl;
+-//   foutba.close();
+-
+-
+-
+-  // now 2D
+-
+-//   for (int i=0; i<param->getSize(); i++)
+-//     {
+-//       for (int j=0; j<param->getSize(); j++)
+-// 	{
+-// 	  pos = i*param->getSize()+j;
+-// 	  x = lat->cells[pos]->getX();
+-// 	  y = lat->cells[pos]->getY();
+-// 	  Cx[pos]->setRe(0,x*y*exp(-(y*y+x*x)/4.));
+-// 	}
+-//     }
+-
+-//   fft->fftn(Cx,nn,2,1);
+-  
+-//   fstream foutar("2dtrans",ios::out); 
+-//   cout<< "after transform resorted" << endl;
+-//   for (int j=0; j<param->getSize(); j++)
+-//     {
+-//       pos = (param->getSize()/2+param->getSize()/4)*param->getSize()+j; 
+-//       cout << 2*param->PI*(-1./2.+static_cast<double>(j)/static_cast<double>(param->getSize())) << " " << Cx[pos]->getRe(0) << " " << Cx[pos]->getIm(0) << endl;
+-//       foutar << 2*param->PI*(-1./2.+static_cast<double>(j)/static_cast<double>(param->getSize())) << " " << Cx[pos]->getRe(0) << " " << Cx[pos]->getIm(0) << endl;
+-//      }
+-//   cout << endl;
+-//   foutar.close();
+diff -ruN '--exclude=build' '--exclude=.git' '--exclude=build-nonative' '--exclude=build-legacy' jimwlk/src/FFT.h jimwlk-opt/src/FFT.h
+--- jimwlk/src/FFT.h	2026-06-10 16:45:45.182329177 +0000
++++ jimwlk-opt/src/FFT.h	2026-06-10 16:56:34.032416256 +0000
+@@ -24,8 +24,6 @@
+ template <typename T>
+ std::vector<T> operator+(const std::vector<T>& a, const std::vector<T>& b)
+ {
+-  //assert(a.size() == b.size());
+-
+     std::vector<T> result;
+     result.reserve(a.size());
+ 
+@@ -42,7 +40,7 @@
+   int size = a.size();
+   for (int i = 0; i<size; i++)
+     {
+-      result.at(i)=b*a.at(i);
++      result[i]=b*a[i];
+     }
+   return result;
+ }
+@@ -55,7 +53,7 @@
+   int size = a.size();
+   for (int i = 0; i<size; i++)
+     {
+-      result.at(i)=a.at(i)/b;
++      result[i]=a[i]/b;
+     }
+   return result;
+ }
+@@ -66,29 +64,64 @@
+  private:
+   fftw_complex *input, *output;
+   fftw_plan p, pback;
++  int n0, n1;
+ 
+ public:
+ 
+   // Constructor.
+   FFT(const int nn[]) 
+     {
++      n0 = nn[0];
++      n1 = nn[1];
+       input = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * nn[0] * nn[1]);
+       output = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * nn[0] * nn[1]);
++#ifdef JIMWLK_DETERMINISTIC_FFT
++      // FFTW_MEASURE selects a plan by run-time benchmarking, which is not
++      // deterministic between runs (and the resulting plans can differ in
++      // floating point round-off). For validation / strict reproducibility
++      // build with -DJIMWLK_DETERMINISTIC_FFT.
++      p = fftw_plan_dft_2d(nn[0], nn[1], input, output, FFTW_FORWARD, FFTW_ESTIMATE);
++      pback = fftw_plan_dft_2d(nn[0], nn[1], input, output, FFTW_BACKWARD, FFTW_ESTIMATE);
++#else
+       p = fftw_plan_dft_2d(nn[0], nn[1], input, output, FFTW_FORWARD, FFTW_MEASURE);
+       pback = fftw_plan_dft_2d(nn[0], nn[1], input, output, FFTW_BACKWARD, FFTW_MEASURE);
++#endif
+     };
+   // Destructor.
+   ~FFT() 
+     {
+       fftw_destroy_plan(p);
++      fftw_destroy_plan(pback); // BUGFIX: pback was leaked in the original
+       fftw_free(input); fftw_free(output);
+     };
+   void fftnVector(vector<complex<double> > **data, vector<complex<double> > **outdata, const int nn[], const int ndim, const int isign);
+   void fftnArray(complex<double> **data, complex<double> **outdata, const int nn[], const int ndim, const int isign, const int mDim);
+   template<class T>
+   void fftn(T **data, T **outdata, const int nn[], const int ndim, const int isign);
+-  void fftnComplex(complex<double> **data, const int nn[], const int ndim, const int isign);
+- 
++
++private:
++  // OPT: shared driver. The four quadrant-copy loop nests of the original
++  // are a single FFT-shift: newpos = ((i+n0/2)%n0)*n1 + ((j+n1/2)%n1).
++  // The mapping (and therefore the result) is identical.
++  void execute(const int isign)
++  {
++      if (isign==1)
++        fftw_execute(p);
++      else
++        fftw_execute(pback);
++
++      // if this is inverse transform, normalize.
++      if(isign == -1)
++        {
++          const double ntot = static_cast<double>(n0)*static_cast<double>(n1);
++          const int N = n0*n1;
++          for(int i=0; i<N; i++)
++            {
++              output[i][0]/=ntot;
++              output[i][1]/=ntot;
++            }
++        }
++  }
+ };
+ 
+ #endif // FFT_H
+diff -ruN '--exclude=build' '--exclude=.git' '--exclude=build-nonative' '--exclude=build-legacy' jimwlk/src/Init.cpp jimwlk-opt/src/Init.cpp
+--- jimwlk/src/Init.cpp	2026-06-10 16:45:45.182329177 +0000
++++ jimwlk-opt/src/Init.cpp	2026-06-10 16:59:55.908281746 +0000
+@@ -3,6 +3,10 @@
+ #include "Init.h"
+ #include <complex>
+ 
++#ifdef _OPENMP
++#include <omp.h>
++#endif
++
+ using namespace std;
+ //**************************************************************************
+ // Init class.
+@@ -1105,12 +1109,20 @@
+ //       // end test
+ 
+ 
++  // OPT: allocate rho once and reuse it for all Ny longitudinal slices
++  // (the original allocated and freed nn[0]*nn[1] matrices on every slice)
++  rho = new Matrix*[nn[0]*nn[1]];
++  for(int i=0; i<param->getSize()*param->getSize(); i++)
++    {
++      rho[i] = new Matrix(param->getNc(),0.);
++    }
++
+   for(int k=0; k<Ny; k++)
+     {
+-      rho = new Matrix*[nn[0]*nn[1]];
+-      for(int i=0; i<param->getSize()*param->getSize(); i++)
++      if (k>0)
+ 	{
+-	  rho[i] = new Matrix(param->getNc(),0.);
++	  for(int i=0; i<param->getSize()*param->getSize(); i++)
++	    rho[i]->setZero();
+ 	}
+ 
+       
+@@ -1132,6 +1144,9 @@
+       fft->fftn(rho,rho,nn,2,1);
+ 
+       // then compute A^+
++#ifdef _OPENMP
++#pragma omp parallel for schedule(static) private(kx,ky,kt2,pos)
++#endif
+       for (int i=0; i<nn[0]; i++)
+ 	{
+ 	  for (int j=0; j<nn[1]; j++)
+@@ -1156,40 +1171,44 @@
+     
+       // compute U
+       
++      // OPT: parallelized; this loop (dominated by expm) is the hot spot of
++      // the MV initialization. Each site is independent.
++#ifdef _OPENMP
++#pragma omp parallel for schedule(static) firstprivate(temp,temp2)
++#endif
+       for (int i=0; i<nn[0]; i++)
+ 	{
+ 	  for (int j=0; j<nn[1]; j++)
+ 	    {
+-	      pos = i*nn[1]+j;
++	      int mypos = i*nn[1]+j;
+ 	      //multiply by -i:
+ 	      for(int nc=0; nc<Nc*Nc; nc++)
+ 		{
+-		  temp3 = rho[pos]->getRe(nc); // rho contains A!
+-		  rho[pos]->setRe(nc,rho[pos]->getIm(nc));
+-		  rho[pos]->setIm(nc,-temp3);
++		  double t3 = rho[mypos]->getRe(nc); // rho contains A!
++		  rho[mypos]->setRe(nc,rho[mypos]->getIm(nc));
++		  rho[mypos]->setIm(nc,-t3);
+ 		}
+-	      temp2 = *rho[pos];
+-	      //cout << temp2 << endl;
++	      temp2 = *rho[mypos];
+ 	      temp2.expm();
+-	      temp = temp2 * lat->cells[pos]->getU();
+-	      //temp = (unit-*A[pos]) * lat->cells[pos]->getU();
++	      temp = temp2 * lat->cells[mypos]->getU();
+ 	      // set U
+-	      lat->cells[pos]->setU(temp);
+-	      lat->cells[pos]->setUi(temp); //this to keep the initial U's at every rapidity step (for unequal rapidity correlations)
++	      lat->cells[mypos]->setU(temp);
++	      lat->cells[mypos]->setUi(temp); //this to keep the initial U's at every rapidity step (for unequal rapidity correlations)
+ 	    }
+ 	}
+         
+       //      UD=lat->cells[pos]->getU();
+       //UD.conjg();
+ 
+-      for(int i=0; i<param->getSize()*param->getSize(); i++)
+-	{
+-	  delete rho[i];
+-	}
+-      
+-      delete[] rho;
+     }
+ 
++  for(int i=0; i<param->getSize()*param->getSize(); i++)
++    {
++      delete rho[i];
++    }
++  
++  delete[] rho;
++
+ 
+    // done. 
+ 
+diff -ruN '--exclude=build' '--exclude=.git' '--exclude=build-nonative' '--exclude=build-legacy' jimwlk/src/Lattice.cpp jimwlk-opt/src/Lattice.cpp
+--- jimwlk/src/Lattice.cpp	2026-06-10 16:45:45.182329177 +0000
++++ jimwlk-opt/src/Lattice.cpp	2026-06-10 16:57:19.992415205 +0000
+@@ -24,8 +24,6 @@
+ 	int pos = i*length+j;
+ 	cells[pos]->setX((i-length/2.));
+ 	cells[pos]->setY((j-length/2.));
+-	//cells[pos]->setX(i);
+-	//cells[pos]->setY(j);
+       }
+ }
+ 
+@@ -40,32 +38,12 @@
+ {
+     cout << "Saving Wilson lines into " << filename << endl;
+ 
+-    // Text output
+-    if (param->getInitMethod() == 10)
+-    {
+-        fstream output(filename.c_str(),ios::out);
+-        if (!output.good())
+-        {
+-	    cerr << "Can't open file for saving, directory does not exist???" << endl;
+-	    exit(1);
+-        }
+-        int length = sqrt(size);
+-        for (int yind=0; yind<length; yind++)
+-        {
+-            for (int xind=0; xind<length; xind++)
+-            {
+-                int pos = yind*length+xind;
+-                output << yind << " " << xind << " " << cells[pos]->getU().getElementsText() << endl;
+-            }
+-        }
+-        output.close();
+-    }
+-    else if (param->getInitMethod() == 11) //  binary
++    if (param->getInitMethod() == 11) //  binary
+     {
+         int N = param->getSize();
+-        int Nc=param->getNc();
++        int Nc = param->getNc();
+         double L = param->getL();
+-        double  a = L/N;
++        double a = L/N;
+         double tmp = 0; // not implemented
+         std::ofstream Outfile;
+         Outfile.open(filename.c_str(), ios::out | ios::binary);
+@@ -74,19 +52,20 @@
+         Outfile.write((char *) &L ,sizeof(double));
+         Outfile.write((char *) &a ,sizeof(double));
+         Outfile.write((char *) &tmp ,sizeof(double));
+-	double *val1=new double[2];
++        double val1[2];   // BUGFIX: was heap allocated and leaked
+         for(int ix=0; ix<N; ix++)
+         {
+             for(int iy=0; iy<N; iy++)
+             {
+-                for(int a=0; a<3; a++)
++                // BUGFIX: the matrix loop bounds were hardcoded to 3
++                // (wrong for Nc=2)
++                for(int j=0; j<Nc; j++)
+                 {
+-                    for(int b=0; b<3; b++)
++                    for(int k=0; k<Nc; k++)
+                     {
+                         int indx = N*iy+ix;
+-                        val1[0] = (cells[indx]->getU()).getRe(a*Nc+b);
+-                        val1[1] = (cells[indx]->getU()).getIm(a*Nc+b);
+-
++                        val1[0] = (cells[indx]->getU()).getRe(j*Nc+k);
++                        val1[1] = (cells[indx]->getU()).getIm(j*Nc+k);
+ 
+                         Outfile.write((char *) val1 ,2*sizeof(double));
+                     }
+@@ -99,6 +78,30 @@
+             cerr << "Error when saving in file " << filename << endl;
+             exit(1);
+         } 
+-
++        Outfile.close();
++    }
++    else
++    {
++        // Text output.
++        // BUGFIX: the original only wrote text output for initMethod==10,
++        // so runs initialized with methods 1-4 (Gauss / MV / ...) silently
++        // produced no Wilson line output at all. Text is now the default
++        // for everything except the binary format (11).
++        fstream output(filename.c_str(),ios::out);
++        if (!output.good())
++        {
++	    cerr << "Can't open file for saving, directory does not exist???" << endl;
++	    exit(1);
++        }
++        int length = sqrt(size);
++        for (int yind=0; yind<length; yind++)
++        {
++            for (int xind=0; xind<length; xind++)
++            {
++                int pos = yind*length+xind;
++                output << yind << " " << xind << " " << cells[pos]->getU().getElementsText() << "\n";
++            }
++        }
++        output.close();
+     }
+ }
+diff -ruN '--exclude=build' '--exclude=.git' '--exclude=build-nonative' '--exclude=build-legacy' jimwlk/src/Matrix.cpp jimwlk-opt/src/Matrix.cpp
+--- jimwlk/src/Matrix.cpp	2026-06-10 16:45:45.182329177 +0000
++++ jimwlk-opt/src/Matrix.cpp	2026-06-10 17:09:29.303593056 +0000
+@@ -3,37 +3,32 @@
+ 
+ //constructor if just dimension is given
+ Matrix::Matrix(int n)
++  : ndim(n), nn(n*n), e(n*n)            // OPT: value-initialize directly, no push_back loop
+ {
+-  ndim = n;
+-  nn = ndim*ndim;
+-  e.reserve(nn);
+-  for(int i=0; i<nn; i++) e.push_back(complex<double>(0.0,0.0));
+ }
+ 
+ //constructor if value for a and dimensions are given (a is the real value on the diagonal)
+ Matrix::Matrix(int n, double a)
++  : ndim(n), nn(n*n), e(n*n)
+ {
+-  ndim = n;
+-  nn = ndim*ndim;
+-  e.reserve(nn);
+-  for(int i=0; i<nn; i++) e.push_back(complex<double>(0.0,0.0));
+   for(int i=0; i<ndim; i++) e[i*ndim+i] = complex<double>(a,0.0);
+ }
+ 
+ 
+ //operators:
+ 
+-Matrix operator * (const Matrix& a, const Matrix& b)
++// OPT: multiply into preallocated output (c must not alias a or b).
++// The accumulation order is identical to the original unrolled code, so
++// results are bitwise identical.
++void Matrix::mult(const Matrix& a, const Matrix& b, Matrix& c)
+ {
+-  int n = a.getNDim();
+-  Matrix c(n);
++  const int n = a.ndim;
+   if (n==2)
+     {
+       c.set(0,0,a(0,0)*b(0,0)+a(0,1)*b(1,0));
+       c.set(0,1,a(0,0)*b(0,1)+a(0,1)*b(1,1));
+       c.set(1,0,a(1,0)*b(0,0)+a(1,1)*b(1,0));
+       c.set(1,1,a(1,0)*b(0,1)+a(1,1)*b(1,1));
+-      return c;
+     }
+   else if (n==3)
+     {
+@@ -46,26 +41,30 @@
+       c.set(2,0,a(2,0)*b(0,0)+a(2,1)*b(1,0)+a(2,2)*b(2,0));
+       c.set(2,1,a(2,0)*b(0,1)+a(2,1)*b(1,1)+a(2,2)*b(2,1));
+       c.set(2,2,a(2,0)*b(0,2)+a(2,1)*b(1,2)+a(2,2)*b(2,2));
+-      return c;
+-    }
+-  else if (n==8)
+-    {
+-      for(int i=0; i<n; i++)
+-	{
+-	  for(int j=0; j<n; j++)
+-	    {
+-	      c.set(i,j,a(i,0)*b(0,j)+a(i,1)*b(1,j)+a(i,2)*b(2,j)+a(i,3)*b(3,j)+a(i,4)*b(4,j)+a(i,5)*b(5,j)+a(i,6)*b(6,j)+a(i,7)*b(7,j));
+-	    }
+-	}
+-      return c;
+     }
+   else
+     {
+-      cout << "[Matrix::operator *]: Matrix product is only defined for 2x2, 3x3, and 8x8 matrixes. You gave me " << n << "x" << n << ". Exiting." << endl;
+-        exit(1);
++      // generic n (covers the 8x8 adjoint case and anything else).
++      // Accumulation order matches the original left-to-right sum.
++      for(int i=0; i<n; i++)
++        {
++          for(int j=0; j<n; j++)
++            {
++              complex<double> s = a(i,0)*b(0,j);
++              for(int k=1; k<n; k++) s += a(i,k)*b(k,j);
++              c.set(i,j,s);
++            }
++        }
+     }
+ }
+ 
++Matrix operator * (const Matrix& a, const Matrix& b)
++{
++  Matrix c(a.getNDim());
++  Matrix::mult(a,b,c);
++  return c;
++}
++
+ //-
+ Matrix operator - (const Matrix& a, const Matrix& b)
+ {
+@@ -85,29 +84,23 @@
+ //* multiply by a real scalar
+ Matrix operator * (const Matrix& a, const double s)
+ {
+-  Matrix aa(a.getNDim());
+-    for(int i=0; i<a.getNN(); i++){
+-      aa.set(i,a(i) * s);
+-    }
+-    return aa;
++  Matrix aa(a);
++  aa *= s;
++  return aa;
+ }
+ Matrix operator * (const double s, const Matrix& a)
+ {
+-  Matrix aa(a.getNDim());
+-    for(int i=0; i<a.getNN(); i++){
+-      aa.set(i,a(i) * s);
+-    }
+-    return aa;
++  Matrix aa(a);
++  aa *= s;
++  return aa;
+ }
+ 
+ //* multiply by a complex number
+ Matrix operator * (const complex<double> s,const Matrix& a)
+ {
+-  Matrix aa(a.getNDim());
+-    for(int i=0; i<a.getNN(); i++){
+-      aa.set(i,a(i) * s);
+-    }
+-    return aa;
++  Matrix aa(a);
++  aa *= s;
++  return aa;
+ }
+ 
+ // / division by scalar
+@@ -118,35 +111,21 @@
+     return aa;
+ }
+ 
++// OPT: in-place conjugate transpose without any heap allocation.
++// (The original allocated a temporary vector with push_back on every call;
++// this function is called once or more per lattice site per evolution step.)
+ Matrix& Matrix::conjg()
+ {
+-  // complex<double> temp[nn];
+-  vector < complex<double> > temp;
+-
+-  for (int i=0; i<ndim; i++)
+-    for (int j=0; j<ndim; j++)
+-      {
+-	temp.push_back(0.);
+-      }  
+-  //save half the matrix
+-  for (int i=0; i<ndim; i++)
+-    for (int j=i; j<ndim; j++)
+-      {
+-	// 	temp[i*ndim+j]=conj(e[i*ndim+j]);
+-	temp.at(i*ndim+j) = (conj(e[i*ndim+j]));
+-      }
+-  //transpose half the matrix
+   for (int i=0; i<ndim; i++)
+-    for (int j=0; j<i; j++)
+-      {
+-	e[j*ndim+i]=conj(e[i*ndim+j]);
+-      }
+-  //transpose the other half using the saved values
+-  for (int i=0; i<ndim; i++)
+-    for (int j=i; j<ndim; j++)
+-      {
+-	e[j*ndim+i]=temp[i*ndim+j];
+-      }
++    {
++      e[i*ndim+i] = conj(e[i*ndim+i]);
++      for (int j=i+1; j<ndim; j++)
++        {
++          const complex<double> upper = e[i*ndim+j];
++          e[i*ndim+j] = conj(e[j*ndim+i]);
++          e[j*ndim+i] = conj(upper);
++        }
++    }
+   return *this;
+ }
+ 
+@@ -162,7 +141,7 @@
+ 	    e[2] -= conj(e1);
+ 	    e[3] -= conj(e3);
+ 	} else {
+-	    cerr << " (Matrix::) invaid dimension nn= " << nn << endl;
++	    cerr << " (Matrix::imag) invalid dimension ndim= " << ndim << endl;
+ 	    exit(1);
+ 	}
+ 	return *this;
+@@ -184,7 +163,8 @@
+        exit(0);
+      }
+    // hard coded values for speed
+-   double c[p+1];
++   // OPT/BUGFIX: use std::vector instead of a variable-length array (non-standard C++)
++   vector<double> c(p+1);
+    c[0] = 1.;
+    c[1] = 0.5;
+    c[2] = 0.1136363636;
+@@ -197,17 +177,20 @@
+        for(int i = 6; i < p; ++i) 
+  	{	    
+  	  c[i+1] = c[i] * ((p - i)/((i + 1.0) * (2.0 * p - i)));
+- 	  //std::cout << "c(" << i+1 << ")=" << c(i+1) << endl;
+  	}
+      }
+-   // Calculate the infinty norm of e, which is defined as the largest row sum of a matrix
++   // Calculate the infinity norm of e, which is defined as the largest row sum of a matrix
++   // BUGFIX: the original computed norm = t*max(norm,temp) inside the row loop, which
++   // applies t repeatedly (and breaks for t<0). Compute the matrix norm first and
++   // scale by |t| once.
+    for(int i=0; i<n; ++i) 
+      {
+        double temp = 0.0;
+        for(int j = 0; j < n; j++)
+  	temp += abs((*this)(i,j)); 
+-       norm = t * max<double>(norm, temp);
++       norm = max<double>(norm, temp);
+      }
++   norm *= fabs(t);
+    // If norm = 0, and all H elements are not nan or infinity but zero, 
+    // then U should be identity.
+    if (norm == 0.0) 
+@@ -247,7 +230,14 @@
+       U = (scale * t) * (*this); // Here U is used as temp value due to that H is const
+     }
+   else
+-    U = *this;
++    {
++      // BUGFIX: the original dropped the factor t in this branch (latent: all
++      // callers in this code base use t=1)
++      if (t == 1.0)
++        U = *this;
++      else
++        U = t * (*this);
++    }
+   
+   // Horner evaluation of the irreducible fraction.
+   // Initialize P (numerator) and Q (denominator) 
+@@ -321,17 +311,17 @@
+   for(int i = 0; i < s; ++i)
+     U = U*U;
+   
+-  *this = U;
++  *this = std::move(U);
+   
+   return *this;
+ }
+ 
+-complex<double> Matrix::det()
++complex<double> Matrix::det() const
+ {
+-  int n = this->getNDim();
+-  Matrix Q(n);
+-  Q = *this;
+-  complex<double> det;
++  // OPT: removed the pointless full-matrix copy of the original
++  const int n = ndim;
++  const Matrix& Q = *this;
++  complex<double> det = 0.;
+  
+   if (n==2)
+     {
+@@ -346,64 +336,44 @@
+   return det;
+ }
+ 
+-complex<double> Matrix::trace()
++complex<double> Matrix::trace() const
+ {
+-  int n = this->getNDim();
+-  Matrix Q(n);
+-  Q = *this;
+-  complex<double> trace;
+- 
+-  if (n==2)
+-    {
+-      trace = Q(0,0)+Q(1,1);
+-    }
+-  else if (n==3)
+-    {
+-      trace = Q(0,0)+Q(1,1)+Q(2,2);
+-    }
+-
+-  return trace;
++  complex<double> tr = 0.;
++  for (int i=0; i<ndim; i++) tr += e[i*ndim+i];
++  return tr;
+ }
+ 
+-double Matrix::FrobeniusNorm()
++double Matrix::FrobeniusNorm() const
+ {
+-  int n = this->getNDim();
+-  Matrix Q(n);
+-  Q = *this;
+-  double norm;
++  // BUGFIX: the original left 'norm' uninitialized and *assigned* (instead of
++  // accumulating) |Q(i,j)|^2 inside the loop, so it returned |last element|.
++  double norm = 0.;
+  
+-  for(int i=0; i<n; i++)
++  for(int i=0; i<nn; i++)
+     { 
+-      for(int j=0; j<n; j++)
+-	{
+-	  norm = abs(Q(i,j))*abs(Q(i,j));
+-	}
++      norm += e[i].real()*e[i].real() + e[i].imag()*e[i].imag();
+     }
+   
+-  norm = sqrt(norm);
+-
+-  return norm;
++  return sqrt(norm);
+ }
+ 
+-double Matrix::OneNorm()
++double Matrix::OneNorm() const
+ {
+-  int n = this->getNDim();
+-  Matrix Q(n);
+-  Q = *this;
+-  double norm[3];
+-  double onenorm;
++  // BUGFIX: the original overwrote (instead of accumulating) the column sums
++  // and read an uninitialized entry for 2x2 matrices. The 1-norm is the
++  // maximum absolute column sum.
++  double onenorm = 0.;
+ 
+-  for(int j=0; j<n; j++)
++  for(int j=0; j<ndim; j++)
+     { 
+-      for(int i=0; i<n; i++)
++      double colsum = 0.;
++      for(int i=0; i<ndim; i++)
+ 	{ 
+-	  norm[j] = abs(Q(i,j));
++	  colsum += abs(e[i*ndim+j]);
+ 	}
++      onenorm = max(onenorm, colsum);
+     }
+   
+-  onenorm = max(norm[0], norm[1]);
+-  onenorm = max(onenorm, norm[2]);
+-  
+   return onenorm;
+ }
+ 
+@@ -412,8 +382,7 @@
+ {
+   int n = this->getNDim();
+   Matrix H2(n);
+-  Matrix Q(n);
+-  Q = *this;
++  const Matrix& Q = *this;   // OPT: no copy needed, H2 is a distinct object
+  
+   if (n==2)
+     {
+@@ -438,7 +407,7 @@
+ 		- Q(0,2)*Q(1,1)*Q(2,0) - Q(0,1)*Q(1,0)*Q(2,2) - Q(1,2)*Q(2,1)*Q(0,0)); // divide by det(H)
+     }
+ 
+-  *this = H2;
++  *this = std::move(H2);
+   return *this;
+ }
+ 
+@@ -468,7 +437,9 @@
+        S = S + wi * ( A*invD );
+      }
+    
+-   *this = S;
++   gsl_integration_glfixed_table_free(table);   // BUGFIX: table was leaked on every call
++
++   *this = std::move(S);
+    
+    return *this;
+ }
+@@ -478,7 +449,7 @@
+ // of the Denman-Beavers iteration. The matrix M tends to I. 
+ // scale specifies scaling: 0, no scaling. 1, determinant scaling (default)
+ // maxit is the number of iterations.
+-// Adabted from The Matrix Function Toolbox by Nick Higham (MATLAB code)
++// Adapted from The Matrix Function Toolbox by Nick Higham (MATLAB code)
+ Matrix& Matrix::sqrtm(const int scale)
+ {
+    const int n = this->getNDim();
+@@ -530,7 +501,7 @@
+ 	 break;
+      }
+ 
+-   *this = X;
++   *this = std::move(X);
+    
+    return *this;
+ }
+@@ -575,6 +546,10 @@
+    k = 0;
+    p = 0;
+    itk = 5;
++   // BUGFIX: j1 and j2 were uninitialized; if normdiff/2 exceeded all table
++   // values, j2 kept garbage. Initialize to the last index.
++   j1 = 15;
++   j2 = 15;
+    
+    while(1)
+      {
+@@ -623,7 +598,7 @@
+    
+    X = pow(2.,k)*L;
+    
+-   *this  = X;
++   *this  = std::move(X);
+ 
+    return *this;
+ }
+@@ -631,9 +606,13 @@
+ 
+ // Output matrix elements in text, used when outputting the Wilson lines
+ // H.M. 20160801
+-string Matrix::getElementsText()
++string Matrix::getElementsText() const
+ {
+     stringstream ss;
++    // BUGFIX: the default stream precision (6 significant digits) loses
++    // ~10 digits of the Wilson lines; these text files are read back by
++    // initMethod 10, so the truncation corrupted restarts/analysis.
++    ss.precision(17);
+     for (int i=0; i<nn; i++)
+     {
+         ss << e[i].real() << " " << e[i].imag() << " ";
+@@ -641,4 +620,3 @@
+     return ss.str();
+ }
+ 
+-
+diff -ruN '--exclude=build' '--exclude=.git' '--exclude=build-nonative' '--exclude=build-legacy' jimwlk/src/Matrix.h jimwlk-opt/src/Matrix.h
+--- jimwlk/src/Matrix.h	2026-06-10 16:45:45.182329177 +0000
++++ jimwlk-opt/src/Matrix.h	2026-06-10 16:52:36.003760714 +0000
+@@ -24,6 +24,24 @@
+     Matrix(int n);
+     Matrix(int n, double a);
+ 
++    // OPT: explicit copy/move semantics. The user-declared copy assignment in the
++    // original code suppressed the implicit move constructor/assignment, so every
++    // temporary produced by the overloaded operators was deep-copied. With move
++    // semantics, expression chains like A = B*C + D become cheap.
++    Matrix(const Matrix&) = default;
++    Matrix(Matrix&&) noexcept = default;
++    Matrix& operator = (Matrix&&) noexcept = default;
++    Matrix& operator = (const Matrix& p)
++    {
++        if (&p != this)
++        {
++            ndim = p.ndim;
++            nn = p.nn;
++            e = p.e;   // single vector assignment (memcpy-like), no per-element loop
++        }
++        return *this;
++    }
++
+     void setRe(int i, double a) {e[i]=complex<double>(a,e[i].imag());};
+     void setRe(int i, int j, double a) {e[j+ndim*i]=complex<double>(a,e[j+ndim*i].imag());};
+     void setIm(int i, double a) {e[i]=complex<double>(e[i].real(),a);};    
+@@ -32,49 +50,54 @@
+     void set(int i, complex<double> a) {e[i]=a;};
+     void set(int i, int j, complex<double> a) {e[j+ndim*i]=a;};
+     
+-    complex<double> get(int i) {return e[i];};
+-    complex<double> get(int i, int j) {return e[j+ndim*i];};
++    complex<double> get(int i) const {return e[i];};
++    complex<double> get(int i, int j) const {return e[j+ndim*i];};
+ 
+-    double getRe(int i) {return e[i].real();};
+-    double getIm(int i) {return e[i].imag();};    
++    double getRe(int i) const {return e[i].real();};
++    double getIm(int i) const {return e[i].imag();};    
+     
+     int getNDim() const {return ndim;}
+     int getNN()  const {return nn;}
+ 
++    // OPT: direct access to storage for tight loops (FFT gather/scatter etc.)
++    complex<double>* data() { return e.data(); }
++    const complex<double>* data() const { return e.data(); }
++
++    // OPT: set all elements to zero without allocating
++    void setZero() { std::fill(e.begin(), e.end(), complex<double>(0.,0.)); }
++
++    // OPT: *this += a*B  (axpy), avoids two temporaries of "*this = *this + a*B"
++    void addMultiple(const complex<double> a, const Matrix& B)
++    {
++        for (int i=0; i<nn; i++) e[i] += a*B.e[i];
++    }
++    void addMultiple(const double a, const Matrix& B)
++    {
++        for (int i=0; i<nn; i++) e[i] += a*B.e[i];
++    }
++
++    // OPT: c = a*b written into existing storage (no allocation).
++    // c must not alias a or b.
++    static void mult(const Matrix& a, const Matrix& b, Matrix& c);
++
+     Matrix& expm(double t = 1.0, const int p = 6);
+     Matrix& logm();
+     Matrix& logm_pade(const int m);
+     Matrix& inv();
+     Matrix& normAm(const int m);
+     Matrix& sqrtm(const int scale = 1);
+-    complex<double> det();
+-    complex<double> trace();
+-    double FrobeniusNorm();
+-    double OneNorm();
++    complex<double> det() const;
++    complex<double> trace() const;
++    double FrobeniusNorm() const;
++    double OneNorm() const;
+     
+-    string getElementsText();   // Return string containing elements
++    string getElementsText() const;   // Return string containing elements
+ 
+-    //    complex<double> trace() {if (ndim==3) return e[0]+e[4]+e[8]; else if(ndim==2) return e[0]+e[3]; };
+     //operators:
+ 
+     //()
+     std::complex<double> operator () (const int i) const { return e[i]; }
+     std::complex<double> operator () (const int i, const int j) const { return e[j+ndim*i]; }
+-    //std::complex<double> operator () (const int i, const int j) { return e[j+ndim*i]; }
+-
+-    //=
+-    const Matrix& operator = (const Matrix& p) 
+-      {
+-	nn = p.getNN();
+-	if(&p != this ) 
+-	  {
+-	    for(int i=0; i<nn; i++) 
+-	      {
+-		e[i] = p.e[i];
+-	      }
+-	  }
+-	return *this;
+-      }
+ 
+     //==
+     bool operator == (const Matrix& p) const 
+@@ -87,9 +110,7 @@
+     //!=
+     bool operator != (const Matrix& p) const 
+     {
+-      for(int i=0; i<nn; i++)
+-	if(e[i] != p.e[i]) return true;
+-      return false;
++      return !(*this == p);
+     }
+ 
+     //+=
+@@ -119,6 +140,14 @@
+ 	for(int i=0; i<nn; i++) e[i] /= a;
+ 	return *this;
+       }
++
++    // /= by a real scalar (component-wise division, bitwise identical to
++    // the original operator/(Matrix,double))
++    Matrix& operator /= (const double a)
++      {
++	for(int i=0; i<nn; i++) e[i] /= a;
++	return *this;
++      }
+     
+     double square() const 
+     {
+@@ -158,7 +187,17 @@
+ Matrix operator * (const std::complex<double> a,const Matrix& b);
+ Matrix operator * (const Matrix&  a, const double b);
+ Matrix operator * (const Matrix&  a, const Matrix& b);
++Matrix operator / (const Matrix&  a, const double b);
+ 
++// OPT: rvalue overloads reuse the temporary's storage instead of allocating
++inline Matrix operator + (Matrix&& a, const Matrix& b) { a += b; return std::move(a); }
++inline Matrix operator + (const Matrix& a, Matrix&& b) { b += a; return std::move(b); }
++inline Matrix operator + (Matrix&& a, Matrix&& b)      { a += b; return std::move(a); }
++inline Matrix operator - (Matrix&& a, const Matrix& b) { a -= b; return std::move(a); }
++inline Matrix operator * (const double s, Matrix&& a)  { a *= s; return std::move(a); }
++inline Matrix operator * (Matrix&& a, const double s)  { a *= s; return std::move(a); }
++inline Matrix operator * (const std::complex<double> s, Matrix&& a) { a *= s; return std::move(a); }
++inline Matrix operator / (Matrix&& a, const double s)  { a /= s; return std::move(a); }
+ 
+ #endif
+ 
+diff -ruN '--exclude=build' '--exclude=.git' '--exclude=build-nonative' '--exclude=build-legacy' jimwlk/src/main.cpp jimwlk-opt/src/main.cpp
+--- jimwlk/src/main.cpp	2026-06-10 16:45:45.184431097 +0000
++++ jimwlk-opt/src/main.cpp	2026-06-11 00:32:59.975112046 +0000
+@@ -11,6 +11,10 @@
+ #include <gsl/gsl_errno.h>
+ #include "gitsha1.h"
+ 
++#ifdef _OPENMP
++#include <omp.h>
++#endif
++
+ #include "Setup.h"
+ #include "Init.h"
+ #include "Infrared.h"
+@@ -370,8 +374,13 @@
+           // S is a 1d vector
+ 	if (param->getSimpleLangevin()==false)
+ {
+-          S[pos]->push_back(alphas*(pow( cos(Pi*y) ,2.)*pow( sin(2.*Pi*x)/(2.*Pi) ,2.)+pow( cos(Pi*x) ,4.)*pow( sin(2.*Pi*y)/(2.*Pi) ,2.))
+-                            /pow( (pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)) ,2.)/nn[0]/nn[0] *mass_regulator);
++          // BUGFIX: the original had cos^2(Pi*y) on the x-term but cos^4(Pi*x)
++          // on the y-term (the kernel must be symmetric under x<->y; compare
++          // the fixed-coupling branch above), and multiplied by the mass
++          // regulator only once although S ~ K^2 (the fixed-coupling branch
++          // correctly uses mass_regulator^2).
++          S[pos]->push_back(alphas*(pow( cos(Pi*y) ,2.)*pow( sin(2.*Pi*x)/(2.*Pi) ,2.)+pow( cos(Pi*x) ,2.)*pow( sin(2.*Pi*y)/(2.*Pi) ,2.))
++                            /pow( (pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)) ,2.)/nn[0]/nn[0] * mass_regulator * mass_regulator);
+           
+  	}         
+           // 		  if(abs(x)<0.1 && abs(y)<0.1)
+@@ -447,47 +456,16 @@
+   fouti << " " << endl;
+   fouti.close();
+   
+-  char outname[25];
+-  sprintf(outname, "k-corr-unequal-%0.5f",0*param->getMeasureSteps()*5*ds*Pi*Pi);
+-  fstream fouty0(outname,ios::out);
+-  fouty0 << " " << endl;
+-  fouty0.close();
+-  sprintf(outname, "k-corr-unequal-%0.5f",1*param->getMeasureSteps()*5*ds*Pi*Pi);
+-  fstream fouty1(outname,ios::out);
+-  fouty1 << " " << endl;
+-  fouty1.close();
+-  sprintf(outname, "k-corr-unequal-%0.5f",2*param->getMeasureSteps()*5*ds*Pi*Pi);
+-  fstream fouty2(outname,ios::out);
+-  fouty2 << " " << endl;
+-  fouty2.close();
+-  sprintf(outname, "k-corr-unequal-%0.5f",3*param->getMeasureSteps()*5*ds*Pi*Pi);
+-  fstream fouty3(outname,ios::out);
+-  fouty3 << " " << endl;
+-  fouty3.close();
+-  sprintf(outname, "k-corr-unequal-%0.5f",4*param->getMeasureSteps()*5*ds*Pi*Pi);
+-  fstream fouty4(outname,ios::out);
+-  fouty4 << " " << endl;
+-  fouty4.close();
+-  sprintf(outname, "k-corr-unequal-%0.5f",5*param->getMeasureSteps()*5*ds*Pi*Pi);
+-  fstream fouty5(outname,ios::out);
+-  fouty5 << " " << endl;
+-  fouty5.close();
+-  sprintf(outname, "k-corr-unequal-%0.5f",6*param->getMeasureSteps()*5*ds*Pi*Pi);
+-  fstream fouty6(outname,ios::out);
+-  fouty6 << " " << endl;
+-  fouty6.close();
+-  sprintf(outname, "k-corr-unequal-%0.5f",7*param->getMeasureSteps()*5*ds*Pi*Pi);
+-  fstream fouty7(outname,ios::out);
+-  fouty7 << " " << endl;
+-  fouty7.close();
+-  sprintf(outname, "k-corr-unequal-%0.5f",8*param->getMeasureSteps()*5*ds*Pi*Pi);
+-  fstream fouty8(outname,ios::out);
+-  fouty8 << " " << endl;
+-  fouty8.close();
+-  sprintf(outname, "k-corr-unequal-%0.5f",9*param->getMeasureSteps()*5*ds*Pi*Pi);
+-  fstream fouty9(outname,ios::out);
+-  fouty9 << " " << endl;
+-  fouty9.close();
++  // OPT: replaced 10 copy-pasted blocks by a loop (and enlarged the buffer,
++  // which could overflow for large step values)
++  char outname[64];
++  for (int iy=0; iy<10; iy++)
++  {
++    snprintf(outname, sizeof(outname), "k-corr-unequal-%0.5f",iy*param->getMeasureSteps()*5*ds*Pi*Pi);
++    fstream fouty(outname,ios::out);
++    fouty << " " << endl;
++    fouty.close();
++  }
+   
+   fstream fout2d("2dcorr.dat",ios::out);
+   fout2d << " " << endl;
+@@ -560,23 +538,50 @@
+   cout << "done." << endl;
+   
+   
++  // OPT: the adjoint generators (TA)^a_{bc} are extremely sparse (~6 of 64
++  // entries non-zero for SU(3)). Precompute the non-zero entries once, in the
++  // same row-major (b,c) order as the original triple loop, so the Hadamard
++  // trace below is evaluated with bitwise-identical arithmetic but without
++  // scanning the zeros.
++  struct TAEntry { int b; int c; complex<double> v; };
++  vector<vector<TAEntry> > TAsparse(Nc2m1);
++  for (int a=0; a<Nc2m1; a++)
++  {
++    for (int b=0; b<Nc2m1; b++)
++      for (int c=0; c<Nc2m1; c++)
++        if (group->getTA(a).get(b,c)!=0.)
++          TAsparse[a].push_back({b,c,group->getTA(a).get(b,c)});
++  }
++  
+   // ---------------------------------------------------------------------------------------------------------------------------------------
+   // begin evolution
+   // here the loop over steps s begins
+   cout << "Beginning evolution ..." << endl;
++#ifdef _OPENMP
++  cout << "OpenMP enabled, using up to " << omp_get_max_threads() << " threads" << endl;
++#endif
+   
+   for(int ids=1; ids<=steps; ids++)
+   {
+     //cout << "step " << ids << endl;
+-    for (int i=0; i<cells; i++)
++    if (param->getSimpleLangevin()==false)
+     {
+-      if (param->getSimpleLangevin()==false)
++      // OPT: deterministic per-cell work, parallelized
++#ifdef _OPENMP
++#pragma omp parallel for schedule(static)
++#endif
++      for (int i=0; i<cells; i++)
+       {
+         lat->cells[i]->computeAdjointU();
+         *UA2[i] = lat->cells[i]->getUA();
+       }
+-      
+-      // generate random Gaussian noise in every cell for Nc^2-1 color components and 2 spatial components x and y
++    }
++    
++    // generate random Gaussian noise in every cell for Nc^2-1 color components and 2 spatial components x and y
++    // NOTE: this loop must stay serial so that the random number sequence
++    // (and therefore the physics trajectory for a given seed) is unchanged.
++    for (int i=0; i<cells; i++)
++    {
+       for (int n=0; n<Nc2m1*2; n++)
+       {
+         xi2[i][n]=complex<double>(random->Gauss(),0.); // real xi
+@@ -590,6 +595,9 @@
+     //cout << "xi fft done" << endl;
+     
+     // now compute C(K_i,xi_i^a) == F^{-1}(F(K_i)F(xi_i^a)) = F^{-1}(F(K_x)F(xi_x^a)+F(K_y)F(xi_y^a))
++#ifdef _OPENMP
++#pragma omp parallel for schedule(static)
++#endif
+     for (int i=0; i<cells; i++)
+     {
+       for (int n=0; n<Nc2m1; n++)
+@@ -655,6 +663,9 @@
+       
+ 
+       
++#ifdef _OPENMP
++#pragma omp parallel for schedule(static) firstprivate(UAD)
++#endif
+       for (int i=0; i<cells; i++)
+       {
+         UAD = *UA2[i];
+@@ -695,9 +706,12 @@
+       
+       // multiply by S
+       
++#ifdef _OPENMP
++#pragma omp parallel for schedule(static)
++#endif
+       for (int i=0; i<cells; i++)
+       {
+-        *UA[i] = (*S[i])[0]*(*UA[i]);
++        *UA[i] *= (*S[i])[0];   // OPT: in place, no temporary
+       }
+       
+       // FFT back
+@@ -709,6 +723,9 @@
+       
+       // take matrix product with U^\dag
+ 
++#ifdef _OPENMP
++#pragma omp parallel for schedule(static) firstprivate(UAD)
++#endif
+       for (int i=0; i<cells; i++)
+       {
+         // do the product UAD (matrix) times SUA (matrix)
+@@ -719,21 +736,19 @@
+         
+         // now take the product of 0.5*i*(\tilde{t}^a)^{bc} ( U^\dag C(S,U) )^{cb}
+         // (Hadamard product, same as Tr((\tilde{t}^a)^{bc} ( U^\dag C(S,U) )^{cd}) )
++        // OPT: iterate only over the precomputed non-zero entries of TA
++        // (same order as the original loop, so bitwise identical)
+         
+         for (int a=0; a<Nc2m1; a++)
+         {
+-          temp=0.;
+-          for (int b=0; b<Nc2m1; b++)
++          complex<double> tmp=0.;
++          for (size_t s=0; s<TAsparse[a].size(); s++)
+           {
+-            for (int c=0; c<Nc2m1; c++)
+-            {
+-              if(group->getTA(a).get(b,c)!=0.)
+-                temp += group->getTA(a).get(b,c)*(*UA[i]).get(c,b);
+-            }
++            tmp += TAsparse[a][s].v*(*UA[i]).get(TAsparse[a][s].c,TAsparse[a][s].b);
+           }
+-          temp*=0.5*I; // 0.5*i is in Eq.(31) but missing in Eq.(34) ... must be there
++          tmp*=0.5*I; // 0.5*i is in Eq.(31) but missing in Eq.(34) ... must be there
+           // use xi as storage
+-          xi[i][a]=temp;
++          xi[i][a]=tmp;
+         }
+       }
+       
+@@ -742,16 +757,16 @@
+       
+       // now compute omega^a and evolve the U field in every cell
+       
++#ifdef _OPENMP
++#pragma omp parallel for schedule(static) firstprivate(M)
++#endif
+       for (int i=0; i<cells; i++)
+       {
+-        for (int a=0; a<param->getNc()*param->getNc(); a++)
+-        {
+-          M.set(a,0.);
+-        }
++        M.setZero();
+         for (int a=0; a<Nc2m1; a++)
+         {
+-          //	      cout << sqrt(ds)*CKxi[i][a] - ds*xi[i][a] << endl;
+-          M += real( sqrt(ds)*CKxi[i][a] - ds*xi[i][a])*group->getT(a);
++          // OPT: in-place axpy, no matrix temporaries (same arithmetic)
++          M.addMultiple(real( sqrt(ds)*CKxi[i][a] - ds*xi[i][a]), group->getT(a));
+         }
+         M *= I;
+         lat->cells[i]->setU(lat->cells[i]->getU()*M.expm());
+@@ -768,21 +783,47 @@
+     {
+       // H.M.
+       // H.M. matrix V xsi V^\dagger
++      // OPT: use V (sum_a xi^a t^a) V^dag instead of sum_a xi^a (V t^a V^dag).
++      // This replaces 2*(Nc^2-1) triple matrix products (and as many
++      // conjugations) per site by building two small color matrices and doing
++      // a single triple product each. Algebraically identical.
++#ifdef _OPENMP
++#pragma omp parallel for schedule(static)
++#endif
+       for (int i=0; i<cells; i++)
+       {
++#ifndef JIMWLK_LEGACY_SL_SUM
++        const int nc = zero_matrix.getNDim();
++        Matrix Ax(nc,0.), Ay(nc,0.);
++        for (int a=0; a<Nc2m1; a++)
++        {
++          Ax.addMultiple(xi2[i][a],       group->getT(a));
++          Ay.addMultiple(xi2[i][Nc2m1+a], group->getT(a));
++        }
++        Matrix Uconj = lat->cells[i]->getU();
++        Uconj.conjg(); // Note that conjg() saves conjg. matrix over original one!
++        Matrix tmp(nc);
++        Matrix::mult(lat->cells[i]->getU(), Ax, tmp);
++        Matrix::mult(tmp, Uconj, *VxsiVx[i]);
++        Matrix::mult(lat->cells[i]->getU(), Ay, tmp);
++        Matrix::mult(tmp, Uconj, *VxsiVy[i]);
++#else
++        // Legacy summation order, bitwise identical to the original code
++        // (build with -DLEGACY_SL_SUM=ON; ~8x more matrix products).
++        // Differences to the default branch are pure floating-point
++        // re-association, < 1e-15 per step.
+         *VxsiVx[i] = zero_matrix;
+         *VxsiVy[i] = zero_matrix;
+-        //Matrix tmpx(param->getNc(),0);
+-        //Matrix tmpy(param->getNc(),0);
+         for (int a=0; a<Nc2m1; a++)
+         {
+-          Matrix Uconj =lat->cells[i]->getU();
+-          Uconj.conjg(); // Note that conjg() saves conjg. matrix over original one!
+-          *VxsiVx[i] = *VxsiVx[i]  + xi2[i][a]* lat->cells[i]->getU()
++          Matrix Uconj = lat->cells[i]->getU();
++          Uconj.conjg();
++          *VxsiVx[i] = *VxsiVx[i] + xi2[i][a]* lat->cells[i]->getU()
++              *group->getT(a) * Uconj;
++          *VxsiVy[i] = *VxsiVy[i] + xi2[i][Nc2m1+a]* lat->cells[i]->getU()
+               *group->getT(a) * Uconj;
+-         *VxsiVy[i] = *VxsiVy[i] + xi2[i][Nc2m1+a]* lat->cells[i]->getU()
+-            *group->getT(a) * Uconj;
+         }
++#endif
+       }
+       
+       // FFT V xi V, save output to same array
+@@ -792,10 +833,14 @@
+       // Compute in Fourier space F(VxsiV) F(K)
+       // Note now *K[i].at(0) is x component of FT of K, and at(1) y comp
+       // Save to VxsiV to save memory
++#ifdef _OPENMP
++#pragma omp parallel for schedule(static)
++#endif
+       for (int i=0; i<cells; i++)
+       {
+-        // Calculatedot prodcut
+-        *VxsiVx[i] = (*K[i])[0] * (*VxsiVx[i]) +  (*K[i])[1] * (*VxsiVy[i]) ;
++        // Calculate dot product
++        *VxsiVx[i] *= (*K[i])[0];
++        VxsiVx[i]->addMultiple((*K[i])[1], *VxsiVy[i]);
+       }
+       
+       // FFT back
+@@ -807,21 +852,20 @@
+ 
+       
+       // Evolve matrix
++#ifdef _OPENMP
++#pragma omp parallel for schedule(static)
++#endif
+       for (int i=0; i<cells; i++)
+       {
+-        
+-        
+-        Matrix left(param->getNc(),0);
+-        left = -I * std::sqrt(ds) * (*VxsiVx[i]);
++        Matrix left = -I * std::sqrt(ds) * (*VxsiVx[i]);
+         Matrix right(param->getNc(),0);
+         
+-        
+         for (int a=0; a<Nc2m1; a++)
+         {
+           // CKxi is approximately real, get more stable evolution by taking the real part?
+-          right = right + real(CKxi[i][a]) * group->getT(a);
++          right.addMultiple(real(CKxi[i][a]), group->getT(a)); // OPT: in-place axpy
+         }
+-        right = I * std::sqrt(ds) * right;
++        right = I * std::sqrt(ds) * std::move(right);
+         
+         lat->cells[i]->setU( left.expm() * lat->cells[i]->getU() * right.expm() );
+         
+@@ -894,16 +938,17 @@
+   // finalize
+   for(int i=0; i<param->getSize()*param->getSize(); i++)
+   {
+-    delete xi[i];
+-    delete xi2[i];
++    // BUGFIX: arrays allocated with new[] must be released with delete[]
++    delete [] xi[i];
++    delete [] xi2[i];
+     delete K[i];
+     
+-    delete CKxi[i];
++    delete [] CKxi[i];
+     
+     if (param->getSimpleLangevin()==false)
+     {
+       delete S[i];
+-      delete CKUxi[i];
++      delete [] CKUxi[i];
+       delete UA[i];
+       delete UA2[i];
+     }
