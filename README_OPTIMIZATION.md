@@ -28,7 +28,7 @@ same input, binary full-precision output compared.
 - old Langevin path (simpleLangevin 0): **bitwise identical** (SU(2) and SU(3)).
 - simple Langevin path, built with `-DLEGACY_SL_SUM=ON`: **bitwise identical**.
 - simple Langevin path, default build: differs only by the documented
-  factorization V(sum_a xi_a t^a)V^dag (one re-associated sum):
+  factorization $V(\sum_a \xi_a t^a)V^\dagger$ (one re-associated sum):
   max |dU| = 5.6e-16 after 4 steps; dipole amplitude per trajectory agrees to
   ~5e-9 after 50 steps; 6-seed ensemble dipole D(r) identical to all printed
   digits (0.000 sigma pull).
@@ -66,7 +66,7 @@ same input, binary full-precision output compared.
   them, so every operator temporary was deep-copied), rvalue operator
   overloads, allocation-free conjg(), mult() into preallocated storage,
   in-place axpy addMultiple(), direct-initialized constructors.
-- Simple Langevin: V(sum_a xi_a t^a)V^dag instead of sum_a xi_a(V t^a V^dag):
+- Simple Langevin: $V(\sum_a \xi_a t^a)V^\dagger$ instead of $\sum_a \xi_a(V t^a V^\dagger)$:
   2 triple matrix products + 1 conjugation per site instead of 16 + 8 (the
   original also copied+conjugated U inside the color loop).
 - Old Langevin: precomputed sparse adjoint-generator structure (same

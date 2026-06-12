@@ -1,0 +1,29 @@
+name: Unit Tests
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+
+jobs:
+  matrix-unit-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ pkg-config libgsl-dev libfftw3-dev
+
+      - name: Configure CMake
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+
+      - name: Build matrix unit tests
+        run: cmake --build build --target matrix_unit_tests --parallel
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure

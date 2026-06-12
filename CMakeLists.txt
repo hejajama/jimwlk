@@ -4,6 +4,8 @@ cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
 # project name and enable C++ support
 project(jimwlk CXX C)
 
+include(CTest)
+
 include_directories("./src/")
 
 # Git module
@@ -14,9 +16,29 @@ git_describe(GIT_DESCRIBE)
 git_local_changes(GIT_LOCAL_CHANGES)
 
 if (APPLE)
-	SET(MACOSX_DEPLOYMENT_TARGET ${DARWIN_MAJOR_SDK_VERSION}.${DARWIN_MINOR_SDK_VERSION})
-	SET(CMAKE_CXX_FLAGS "--sysroot ${CMAKE_OSX_SYSROOT} ${CMAKE_CXX_FLAGS}")
-	MESSAGE("Setting MACOSX_DEPLOYMENT_TARGET to '${MACOSX_DEPLOYMENT_TARGET}'.")
+	# Keep Apple toolchain settings robust: only set deployment target if the
+	# version variables are actually defined, and never emit an empty --sysroot.
+	if(DEFINED DARWIN_MAJOR_SDK_VERSION AND DEFINED DARWIN_MINOR_SDK_VERSION)
+		set(MACOSX_DEPLOYMENT_TARGET "${DARWIN_MAJOR_SDK_VERSION}.${DARWIN_MINOR_SDK_VERSION}")
+		message("Setting MACOSX_DEPLOYMENT_TARGET to '${MACOSX_DEPLOYMENT_TARGET}'.")
+	endif()
+
+	if(NOT CMAKE_OSX_SYSROOT)
+		execute_process(
+			COMMAND xcrun --sdk macosx --show-sdk-path
+			OUTPUT_VARIABLE _JIMWLK_APPLE_SDK
+			OUTPUT_STRIP_TRAILING_WHITESPACE
+		)
+		if(_JIMWLK_APPLE_SDK)
+			set(CMAKE_OSX_SYSROOT "${_JIMWLK_APPLE_SDK}")
+		endif()
+	endif()
+
+	if(CMAKE_OSX_SYSROOT)
+		set(CMAKE_C_FLAGS "--sysroot ${CMAKE_OSX_SYSROOT} ${CMAKE_C_FLAGS}")
+		set(CMAKE_CXX_FLAGS "--sysroot ${CMAKE_OSX_SYSROOT} ${CMAKE_CXX_FLAGS}")
+		message("Using Apple SDK sysroot '${CMAKE_OSX_SYSROOT}'.")
+	endif()
 endif()
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
