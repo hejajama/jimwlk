@@ -102,6 +102,7 @@ public:
     //==
     bool operator == (const Matrix& p) const 
     {
+      if(ndim != p.ndim || nn != p.nn) return false;
       for(int i=0; i<nn; i++)
 	if(e[i] != p.e[i]) return false;
       return true;
