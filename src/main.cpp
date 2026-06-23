@@ -84,8 +84,8 @@ int main(int argc, char *argv[])
   Init *init;
   init = new Init(nn);
   //initialize infrared regulator object
-  Infrared *infrared;
-  infrared = new Infrared(nn);
+  //Infrared *infrared;
+  //infrared = new Infrared(nn);
   //initialize measure object
   Measure *measure;
   measure = new Measure(param,nn);
@@ -163,7 +163,7 @@ int main(int argc, char *argv[])
     K[i] = new vector<complex<double> >;
   }
   
-  vector<complex<double> > ** S;
+  vector<complex<double> > ** S = nullptr;
   
   if (param->getSimpleLangevin()==false)
   {
@@ -187,9 +187,9 @@ int main(int argc, char *argv[])
   //// Additional memory allocations if simple algenvin step is not used 
   
   // C(K,U^{ab} xi^a), vector in a (color)
-  complex<double> ** CKUxi;
-  Matrix ** UA;
-  Matrix ** UA2;
+  complex<double> ** CKUxi = nullptr;
+  Matrix ** UA = nullptr;
+  Matrix ** UA2 = nullptr;
   
   if (param->getSimpleLangevin()==false)
   {
@@ -218,8 +218,8 @@ int main(int argc, char *argv[])
   }
   
   // Matrix V xsi V^\dagger, if simple lagenvin step is used, this is the only matrix needed
-  Matrix ** VxsiVx;
-  Matrix ** VxsiVy;
+  Matrix ** VxsiVx = nullptr;
+  Matrix ** VxsiVy = nullptr;
   Matrix zero_matrix(param->getNc(), 0);  // Optimize: easy to set
   // some matrices to zero without creating a new one
   // which would require Nc^2 push_back operations
@@ -283,10 +283,10 @@ int main(int argc, char *argv[])
           }
           
           double length = param->getL();
-          double phys_x = x/nn[0]*length; //in fm
-          double phys_y = y/nn[1]*length;
+          //double phys_x = x/nn[0]*length; //in fm
+          //double phys_y = y/nn[1]*length;
           double fmgev = 5.068;
-          double mr_physical = sqrt(phys_x*phys_x + phys_y*phys_y)*m*fmgev;
+          //double mr_physical = sqrt(phys_x*phys_x + phys_y*phys_y)*m*fmgev;
           // r is in fm, m is in GeV, multiply by 5!
           
           // Lattice units
@@ -442,13 +442,11 @@ int main(int argc, char *argv[])
   fouti << " " << endl;
   fouti.close();
   
-  // OPT: replaced 10 copy-pasted blocks by a loop (and enlarged the buffer,
-  // which could overflow for large step values)
-  char outname[64];
+  // Use std::string to avoid fixed-size buffer truncation.
   for (int iy=0; iy<10; iy++)
   {
-    snprintf(outname, sizeof(outname), "k-corr-unequal-%0.5f",iy*param->getMeasureSteps()*5*ds*Pi*Pi);
-    fstream fouty(outname,ios::out);
+    string outname = "k-corr-unequal-" + to_string(iy*param->getMeasureSteps()*5*ds*Pi*Pi);
+    fstream fouty(outname.c_str(),ios::out);
     fouty << " " << endl;
     fouty.close();
   }

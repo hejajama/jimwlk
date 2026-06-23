@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <iostream>
+#include <string>
 
 using namespace std;
 
@@ -18,7 +19,7 @@ public:
   // Constructor.
   Setup() {}
 
-  char *StringFind( const char* file_name,  const char* st);
+  string StringFind( const char* file_name,  const char* st);
   double DFind( const char* file_name,  const char* st);
   int IFind( const char* file_name,  const char* st);
   int IsFile(const char *file_name);
