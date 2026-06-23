@@ -1,6 +1,8 @@
 // Setup.cpp is part of the JIMWLK solver.
 // Copyright (C) 2011 Bjoern Schenke.
 #include "Setup.h"
+#include <fstream>
+#include <stdexcept>
 
 //**************************************************************************
 // Setup class.
@@ -10,16 +12,11 @@
 // Parameter I/O
 
 //reads a string
-char *Setup::StringFind(const char* file_name, const char *st)
+string Setup::StringFind(const char* file_name, const char *st)
 {
-  // char* s = new char[80];
-  // char* x = new char[80];
-  char* s = new char[180];
-  char* x = new char[180];
-  memset(s,1,179);
- 
-  FILE *input, *tmp_file;
-  int ind, check;
+  ifstream input(file_name);
+  string key;
+  string value;
   
   static int flag = 0;
   
@@ -27,60 +24,36 @@ char *Setup::StringFind(const char* file_name, const char *st)
     {
       if(!IsFile(file_name))
 	{
-	  cerr << "The input file named " << file_name << " is absent. Exiting." << endl;
-	  exit(1);
+	  throw runtime_error(string("The input file named ") + file_name + " is absent.");
 	}/* if !IsFile */
       flag = 1;
     }/* if flag == 0 */
   
-  input = fopen(file_name,"r");
-  
-  //x = char_malloc(80);
-  //s = char_malloc(80);
-  
-  check=fscanf(input, "%s", s);
-  ind = 0;
-  while(strcmp(s, "EndOfFile") != 0)
+  while (input >> key)
     {
-      check=fscanf(input, "%s", x);
-      if(strcmp(s, st) == 0)
+      if (key == "EndOfFile")
+        {
+          break;
+        }
+
+      if (!(input >> value))
+        {
+          break;
+        }
+
+      if (key == st)
 	{
-	  ind++;
-	  fclose(input);
-	  delete[] s;
-	  return x;
+	  return value;
 	}/* if right, return */
-        //delete[] s;
-	//s = char_malloc(80);
-      check=fscanf(input, "%s", s);
     }/* while */
-  
-  fclose(input);
-  
-  if(ind == 0)
-    {
-      cerr << st << " not found in " << file_name << ". Exiting." << endl;
-      delete[] x;
-      delete[] s;
-     exit(1);
-    }
+
+  throw runtime_error(string(st) + " not found in " + file_name + ".");
  }/* StringFind */
 
 // reads a double using stringfind:
 double Setup::DFind(const char *file_name, const char *st)
 {
-  char *s;
-  s = new char[180];
-  memset(s,1,179);
- 
-  double x;
-  
-  s = StringFind(file_name, st);
-  
-  sscanf(s, "%lf", &x);
-
-  delete[] s;
-  return x;
+  return stod(StringFind(file_name, st));
 }/* DFind */
 
 // reads an integer using stringfind:
@@ -94,15 +67,6 @@ int Setup::IFind(const char *file_name, const char *st)
 
 int Setup::IsFile(const char *file_name)
 {
-  static int isf;
-  static int ind = 0;
-  char st[180];
-  FILE *temp;
-  
-  if( (temp = fopen(file_name,"r")) == NULL) return 0;
-  else 
-    {
-      fclose(temp);
-      return 1;
-    }
+  ifstream temp(file_name);
+  return temp.good() ? 1 : 0;
 }/* IsFile */

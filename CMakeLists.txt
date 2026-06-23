@@ -1,8 +1,10 @@
 # stop if cmake version is below 3.0
-cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 
 # project name and enable C++ support
 project(jimwlk CXX C)
+
+include(CTest)
 
 include_directories("./src/")
 
@@ -14,9 +16,29 @@ git_describe(GIT_DESCRIBE)
 git_local_changes(GIT_LOCAL_CHANGES)
 
 if (APPLE)
-	SET(MACOSX_DEPLOYMENT_TARGET ${DARWIN_MAJOR_SDK_VERSION}.${DARWIN_MINOR_SDK_VERSION})
-	SET(CMAKE_CXX_FLAGS "--sysroot ${CMAKE_OSX_SYSROOT} ${CMAKE_CXX_FLAGS}")
-	MESSAGE("Setting MACOSX_DEPLOYMENT_TARGET to '${MACOSX_DEPLOYMENT_TARGET}'.")
+	# Keep Apple toolchain settings robust: only set deployment target if the
+	# version variables are actually defined, and never emit an empty --sysroot.
+	if(DEFINED DARWIN_MAJOR_SDK_VERSION AND DEFINED DARWIN_MINOR_SDK_VERSION)
+		set(MACOSX_DEPLOYMENT_TARGET "${DARWIN_MAJOR_SDK_VERSION}.${DARWIN_MINOR_SDK_VERSION}")
+		message("Setting MACOSX_DEPLOYMENT_TARGET to '${MACOSX_DEPLOYMENT_TARGET}'.")
+	endif()
+
+	if(NOT CMAKE_OSX_SYSROOT)
+		execute_process(
+			COMMAND xcrun --sdk macosx --show-sdk-path
+			OUTPUT_VARIABLE _JIMWLK_APPLE_SDK
+			OUTPUT_STRIP_TRAILING_WHITESPACE
+		)
+		if(_JIMWLK_APPLE_SDK)
+			set(CMAKE_OSX_SYSROOT "${_JIMWLK_APPLE_SDK}")
+		endif()
+	endif()
+
+	if(CMAKE_OSX_SYSROOT)
+		set(CMAKE_C_FLAGS "--sysroot ${CMAKE_OSX_SYSROOT} ${CMAKE_C_FLAGS}")
+		set(CMAKE_CXX_FLAGS "--sysroot ${CMAKE_OSX_SYSROOT} ${CMAKE_CXX_FLAGS}")
+		message("Using Apple SDK sysroot '${CMAKE_OSX_SYSROOT}'.")
+	endif()
 endif()
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
@@ -31,7 +53,34 @@ else ()
 endif()
 
 # Optimization on (for debug flags, change to Debug)
-set(CMAKE_BUILD_TYPE Release)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
+# OPT: tune for the build machine (disable for portable binaries:
+# cmake -DENABLE_NATIVE=OFF ..)
+option(ENABLE_NATIVE "Build with -march=native" ON)
+if(ENABLE_NATIVE AND NOT MSVC)
+  include(CheckCXXCompilerFlag)
+  check_cxx_compiler_flag("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
+  if(COMPILER_SUPPORTS_MARCH_NATIVE)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
+  endif()
+endif()
+
+# Strictly reproducible FFT plans (FFTW_ESTIMATE instead of FFTW_MEASURE);
+# useful for validation and debugging
+option(DETERMINISTIC_FFT "Use deterministic FFTW plans" OFF)
+
+# Reproduce the original code's floating point summation order in the
+# simple-Langevin V xi V^dag construction (slower; for strict A/B testing)
+option(LEGACY_SL_SUM "Bitwise-legacy simple-Langevin summation" OFF)
+if(LEGACY_SL_SUM)
+  add_definitions(-DJIMWLK_LEGACY_SL_SUM)
+endif()
+if(DETERMINISTIC_FFT)
+  add_definitions(-DJIMWLK_DETERMINISTIC_FFT)
+endif()
 
 find_package(GSL REQUIRED)
 include_directories(${GSL_INCLUDE_DIRS})

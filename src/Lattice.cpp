@@ -24,8 +24,6 @@ Lattice::Lattice(Parameters *param, int N, int length)
 	int pos = i*length+j;
 	cells[pos]->setX((i-length/2.));
 	cells[pos]->setY((j-length/2.));
-	//cells[pos]->setX(i);
-	//cells[pos]->setY(j);
       }
 }
 
@@ -40,32 +38,12 @@ void Lattice::PrintWilsonLines(string filename, Parameters *param)
 {
     cout << "Saving Wilson lines into " << filename << endl;
 
-    // Text output
-    if (param->getInitMethod() == 10)
-    {
-        fstream output(filename.c_str(),ios::out);
-        if (!output.good())
-        {
-	    cerr << "Can't open file for saving, directory does not exist???" << endl;
-	    exit(1);
-        }
-        int length = sqrt(size);
-        for (int yind=0; yind<length; yind++)
-        {
-            for (int xind=0; xind<length; xind++)
-            {
-                int pos = yind*length+xind;
-                output << yind << " " << xind << " " << cells[pos]->getU().getElementsText() << endl;
-            }
-        }
-        output.close();
-    }
-    else if (param->getInitMethod() == 11) //  binary
+    if (param->getInitMethod() == 11) //  binary
     {
         int N = param->getSize();
-        int Nc=param->getNc();
+        int Nc = param->getNc();
         double L = param->getL();
-        double  a = L/N;
+        double a = L/N;
         double tmp = 0; // not implemented
         std::ofstream Outfile;
         Outfile.open(filename.c_str(), ios::out | ios::binary);
@@ -74,19 +52,20 @@ void Lattice::PrintWilsonLines(string filename, Parameters *param)
         Outfile.write((char *) &L ,sizeof(double));
         Outfile.write((char *) &a ,sizeof(double));
         Outfile.write((char *) &tmp ,sizeof(double));
-	double *val1=new double[2];
+        double val1[2];   // BUGFIX: was heap allocated and leaked
         for(int ix=0; ix<N; ix++)
         {
             for(int iy=0; iy<N; iy++)
             {
-                for(int a=0; a<3; a++)
+                // BUGFIX: the matrix loop bounds were hardcoded to 3
+                // (wrong for Nc=2)
+                for(int j=0; j<Nc; j++)
                 {
-                    for(int b=0; b<3; b++)
+                    for(int k=0; k<Nc; k++)
                     {
                         int indx = N*iy+ix;
-                        val1[0] = (cells[indx]->getU()).getRe(a*Nc+b);
-                        val1[1] = (cells[indx]->getU()).getIm(a*Nc+b);
-
+                        val1[0] = (cells[indx]->getU()).getRe(j*Nc+k);
+                        val1[1] = (cells[indx]->getU()).getIm(j*Nc+k);
 
                         Outfile.write((char *) val1 ,2*sizeof(double));
                     }
@@ -99,6 +78,30 @@ void Lattice::PrintWilsonLines(string filename, Parameters *param)
             cerr << "Error when saving in file " << filename << endl;
             exit(1);
         } 
-
+        Outfile.close();
+    }
+    else
+    {
+        // Text output.
+        // BUGFIX: the original only wrote text output for initMethod==10,
+        // so runs initialized with methods 1-4 (Gauss / MV / ...) silently
+        // produced no Wilson line output at all. Text is now the default
+        // for everything except the binary format (11).
+        fstream output(filename.c_str(),ios::out);
+        if (!output.good())
+        {
+	    cerr << "Can't open file for saving, directory does not exist???" << endl;
+	    exit(1);
+        }
+        int length = sqrt(size);
+        for (int yind=0; yind<length; yind++)
+        {
+            for (int xind=0; xind<length; xind++)
+            {
+                int pos = yind*length+xind;
+                output << yind << " " << xind << " " << cells[pos]->getU().getElementsText() << "\n";
+            }
+        }
+        output.close();
     }
 }

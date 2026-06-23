@@ -3,37 +3,32 @@
 
 //constructor if just dimension is given
 Matrix::Matrix(int n)
+  : ndim(n), nn(n*n), e(n*n)            // OPT: value-initialize directly, no push_back loop
 {
-  ndim = n;
-  nn = ndim*ndim;
-  e.reserve(nn);
-  for(int i=0; i<nn; i++) e.push_back(complex<double>(0.0,0.0));
 }
 
 //constructor if value for a and dimensions are given (a is the real value on the diagonal)
 Matrix::Matrix(int n, double a)
+  : ndim(n), nn(n*n), e(n*n)
 {
-  ndim = n;
-  nn = ndim*ndim;
-  e.reserve(nn);
-  for(int i=0; i<nn; i++) e.push_back(complex<double>(0.0,0.0));
   for(int i=0; i<ndim; i++) e[i*ndim+i] = complex<double>(a,0.0);
 }
 
 
 //operators:
 
-Matrix operator * (const Matrix& a, const Matrix& b)
+// OPT: multiply into preallocated output (c must not alias a or b).
+// The accumulation order is identical to the original unrolled code, so
+// results are bitwise identical.
+void Matrix::mult(const Matrix& a, const Matrix& b, Matrix& c)
 {
-  int n = a.getNDim();
-  Matrix c(n);
+  const int n = a.ndim;
   if (n==2)
     {
       c.set(0,0,a(0,0)*b(0,0)+a(0,1)*b(1,0));
       c.set(0,1,a(0,0)*b(0,1)+a(0,1)*b(1,1));
       c.set(1,0,a(1,0)*b(0,0)+a(1,1)*b(1,0));
       c.set(1,1,a(1,0)*b(0,1)+a(1,1)*b(1,1));
-      return c;
     }
   else if (n==3)
     {
@@ -46,24 +41,28 @@ Matrix operator * (const Matrix& a, const Matrix& b)
       c.set(2,0,a(2,0)*b(0,0)+a(2,1)*b(1,0)+a(2,2)*b(2,0));
       c.set(2,1,a(2,0)*b(0,1)+a(2,1)*b(1,1)+a(2,2)*b(2,1));
       c.set(2,2,a(2,0)*b(0,2)+a(2,1)*b(1,2)+a(2,2)*b(2,2));
-      return c;
-    }
-  else if (n==8)
-    {
-      for(int i=0; i<n; i++)
-	{
-	  for(int j=0; j<n; j++)
-	    {
-	      c.set(i,j,a(i,0)*b(0,j)+a(i,1)*b(1,j)+a(i,2)*b(2,j)+a(i,3)*b(3,j)+a(i,4)*b(4,j)+a(i,5)*b(5,j)+a(i,6)*b(6,j)+a(i,7)*b(7,j));
-	    }
-	}
-      return c;
     }
   else
     {
-      cout << "[Matrix::operator *]: Matrix product is only defined for 2x2, 3x3, and 8x8 matrixes. You gave me " << n << "x" << n << ". Exiting." << endl;
-        exit(1);
+      // generic n (covers the 8x8 adjoint case and anything else).
+      // Accumulation order matches the original left-to-right sum.
+      for(int i=0; i<n; i++)
+        {
+          for(int j=0; j<n; j++)
+            {
+              complex<double> s = a(i,0)*b(0,j);
+              for(int k=1; k<n; k++) s += a(i,k)*b(k,j);
+              c.set(i,j,s);
+            }
+        }
     }
+}
+
+Matrix operator * (const Matrix& a, const Matrix& b)
+{
+  Matrix c(a.getNDim());
+  Matrix::mult(a,b,c);
+  return c;
 }
 
 //-
@@ -85,29 +84,23 @@ Matrix operator + (const Matrix& a, const Matrix& b)
 //* multiply by a real scalar
 Matrix operator * (const Matrix& a, const double s)
 {
-  Matrix aa(a.getNDim());
-    for(int i=0; i<a.getNN(); i++){
-      aa.set(i,a(i) * s);
-    }
-    return aa;
+  Matrix aa(a);
+  aa *= s;
+  return aa;
 }
 Matrix operator * (const double s, const Matrix& a)
 {
-  Matrix aa(a.getNDim());
-    for(int i=0; i<a.getNN(); i++){
-      aa.set(i,a(i) * s);
-    }
-    return aa;
+  Matrix aa(a);
+  aa *= s;
+  return aa;
 }
 
 //* multiply by a complex number
 Matrix operator * (const complex<double> s,const Matrix& a)
 {
-  Matrix aa(a.getNDim());
-    for(int i=0; i<a.getNN(); i++){
-      aa.set(i,a(i) * s);
-    }
-    return aa;
+  Matrix aa(a);
+  aa *= s;
+  return aa;
 }
 
 // / division by scalar
@@ -118,35 +111,21 @@ Matrix operator / (const Matrix& a, const double s)
     return aa;
 }
 
+// OPT: in-place conjugate transpose without any heap allocation.
+// (The original allocated a temporary vector with push_back on every call;
+// this function is called once or more per lattice site per evolution step.)
 Matrix& Matrix::conjg()
 {
-  // complex<double> temp[nn];
-  vector < complex<double> > temp;
-
   for (int i=0; i<ndim; i++)
-    for (int j=0; j<ndim; j++)
-      {
-	temp.push_back(0.);
-      }  
-  //save half the matrix
-  for (int i=0; i<ndim; i++)
-    for (int j=i; j<ndim; j++)
-      {
-	// 	temp[i*ndim+j]=conj(e[i*ndim+j]);
-	temp.at(i*ndim+j) = (conj(e[i*ndim+j]));
-      }
-  //transpose half the matrix
-  for (int i=0; i<ndim; i++)
-    for (int j=0; j<i; j++)
-      {
-	e[j*ndim+i]=conj(e[i*ndim+j]);
-      }
-  //transpose the other half using the saved values
-  for (int i=0; i<ndim; i++)
-    for (int j=i; j<ndim; j++)
-      {
-	e[j*ndim+i]=temp[i*ndim+j];
-      }
+    {
+      e[i*ndim+i] = conj(e[i*ndim+i]);
+      for (int j=i+1; j<ndim; j++)
+        {
+          const complex<double> upper = e[i*ndim+j];
+          e[i*ndim+j] = conj(e[j*ndim+i]);
+          e[j*ndim+i] = conj(upper);
+        }
+    }
   return *this;
 }
 
@@ -162,7 +141,7 @@ Matrix& Matrix::imag()
 	    e[2] -= conj(e1);
 	    e[3] -= conj(e3);
 	} else {
-	    cerr << " (Matrix::) invaid dimension nn= " << nn << endl;
+	    cerr << " (Matrix::imag) invalid dimension ndim= " << ndim << endl;
 	    exit(1);
 	}
 	return *this;
@@ -184,7 +163,8 @@ Matrix& Matrix::expm(double t, const int p)
        exit(0);
      }
    // hard coded values for speed
-   double c[p+1];
+   // OPT/BUGFIX: use std::vector instead of a variable-length array (non-standard C++)
+   vector<double> c(p+1);
    c[0] = 1.;
    c[1] = 0.5;
    c[2] = 0.1136363636;
@@ -197,17 +177,20 @@ Matrix& Matrix::expm(double t, const int p)
        for(int i = 6; i < p; ++i) 
  	{	    
  	  c[i+1] = c[i] * ((p - i)/((i + 1.0) * (2.0 * p - i)));
- 	  //std::cout << "c(" << i+1 << ")=" << c(i+1) << endl;
  	}
      }
-   // Calculate the infinty norm of e, which is defined as the largest row sum of a matrix
+   // Calculate the infinity norm of e, which is defined as the largest row sum of a matrix
+   // BUGFIX: the original computed norm = t*max(norm,temp) inside the row loop, which
+   // applies t repeatedly (and breaks for t<0). Compute the matrix norm first and
+   // scale by |t| once.
    for(int i=0; i<n; ++i) 
      {
        double temp = 0.0;
        for(int j = 0; j < n; j++)
  	temp += abs((*this)(i,j)); 
-       norm = t * max<double>(norm, temp);
+       norm = max<double>(norm, temp);
      }
+   norm *= fabs(t);
    // If norm = 0, and all H elements are not nan or infinity but zero, 
    // then U should be identity.
    if (norm == 0.0) 
@@ -247,7 +230,14 @@ Matrix& Matrix::expm(double t, const int p)
       U = (scale * t) * (*this); // Here U is used as temp value due to that H is const
     }
   else
-    U = *this;
+    {
+      // BUGFIX: the original dropped the factor t in this branch (latent: all
+      // callers in this code base use t=1)
+      if (t == 1.0)
+        U = *this;
+      else
+        U = t * (*this);
+    }
   
   // Horner evaluation of the irreducible fraction.
   // Initialize P (numerator) and Q (denominator) 
@@ -321,17 +311,17 @@ Matrix& Matrix::expm(double t, const int p)
   for(int i = 0; i < s; ++i)
     U = U*U;
   
-  *this = U;
+  *this = std::move(U);
   
   return *this;
 }
 
-complex<double> Matrix::det()
+complex<double> Matrix::det() const
 {
-  int n = this->getNDim();
-  Matrix Q(n);
-  Q = *this;
-  complex<double> det;
+  // OPT: removed the pointless full-matrix copy of the original
+  const int n = ndim;
+  const Matrix& Q = *this;
+  complex<double> det = 0.;
  
   if (n==2)
     {
@@ -346,63 +336,43 @@ complex<double> Matrix::det()
   return det;
 }
 
-complex<double> Matrix::trace()
+complex<double> Matrix::trace() const
 {
-  int n = this->getNDim();
-  Matrix Q(n);
-  Q = *this;
-  complex<double> trace;
- 
-  if (n==2)
-    {
-      trace = Q(0,0)+Q(1,1);
-    }
-  else if (n==3)
-    {
-      trace = Q(0,0)+Q(1,1)+Q(2,2);
-    }
-
-  return trace;
+  complex<double> tr = 0.;
+  for (int i=0; i<ndim; i++) tr += e[i*ndim+i];
+  return tr;
 }
 
-double Matrix::FrobeniusNorm()
+double Matrix::FrobeniusNorm() const
 {
-  int n = this->getNDim();
-  Matrix Q(n);
-  Q = *this;
-  double norm;
+  // BUGFIX: the original left 'norm' uninitialized and *assigned* (instead of
+  // accumulating) |Q(i,j)|^2 inside the loop, so it returned |last element|.
+  double norm = 0.;
  
-  for(int i=0; i<n; i++)
+  for(int i=0; i<nn; i++)
     { 
-      for(int j=0; j<n; j++)
-	{
-	  norm = abs(Q(i,j))*abs(Q(i,j));
-	}
+      norm += e[i].real()*e[i].real() + e[i].imag()*e[i].imag();
     }
   
-  norm = sqrt(norm);
-
-  return norm;
+  return sqrt(norm);
 }
 
-double Matrix::OneNorm()
+double Matrix::OneNorm() const
 {
-  int n = this->getNDim();
-  Matrix Q(n);
-  Q = *this;
-  double norm[3];
-  double onenorm;
+  // BUGFIX: the original overwrote (instead of accumulating) the column sums
+  // and read an uninitialized entry for 2x2 matrices. The 1-norm is the
+  // maximum absolute column sum.
+  double onenorm = 0.;
 
-  for(int j=0; j<n; j++)
+  for(int j=0; j<ndim; j++)
     { 
-      for(int i=0; i<n; i++)
+      double colsum = 0.;
+      for(int i=0; i<ndim; i++)
 	{ 
-	  norm[j] = abs(Q(i,j));
+	  colsum += abs(e[i*ndim+j]);
 	}
+      onenorm = max(onenorm, colsum);
     }
-  
-  onenorm = max(norm[0], norm[1]);
-  onenorm = max(onenorm, norm[2]);
   
   return onenorm;
 }
@@ -412,8 +382,7 @@ Matrix& Matrix::inv()
 {
   int n = this->getNDim();
   Matrix H2(n);
-  Matrix Q(n);
-  Q = *this;
+  const Matrix& Q = *this;   // OPT: no copy needed, H2 is a distinct object
  
   if (n==2)
     {
@@ -438,7 +407,7 @@ Matrix& Matrix::inv()
 		- Q(0,2)*Q(1,1)*Q(2,0) - Q(0,1)*Q(1,0)*Q(2,2) - Q(1,2)*Q(2,1)*Q(0,0)); // divide by det(H)
     }
 
-  *this = H2;
+  *this = std::move(H2);
   return *this;
 }
 
@@ -468,7 +437,9 @@ Matrix& Matrix::logm_pade(const int m)
        S = S + wi * ( A*invD );
      }
    
-   *this = S;
+   gsl_integration_glfixed_table_free(table);   // BUGFIX: table was leaked on every call
+
+   *this = std::move(S);
    
    return *this;
 }
@@ -478,7 +449,7 @@ Matrix& Matrix::logm_pade(const int m)
 // of the Denman-Beavers iteration. The matrix M tends to I. 
 // scale specifies scaling: 0, no scaling. 1, determinant scaling (default)
 // maxit is the number of iterations.
-// Adabted from The Matrix Function Toolbox by Nick Higham (MATLAB code)
+// Adapted from The Matrix Function Toolbox by Nick Higham (MATLAB code)
 Matrix& Matrix::sqrtm(const int scale)
 {
    const int n = this->getNDim();
@@ -530,7 +501,7 @@ Matrix& Matrix::sqrtm(const int scale)
 	 break;
      }
 
-   *this = X;
+   *this = std::move(X);
    
    return *this;
 }
@@ -575,6 +546,10 @@ Matrix& Matrix::logm()
    k = 0;
    p = 0;
    itk = 5;
+   // BUGFIX: j1 and j2 were uninitialized; if normdiff/2 exceeded all table
+   // values, j2 kept garbage. Initialize to the last index.
+   j1 = 15;
+   j2 = 15;
    
    while(1)
      {
@@ -623,7 +598,7 @@ Matrix& Matrix::logm()
    
    X = pow(2.,k)*L;
    
-   *this  = X;
+   *this  = std::move(X);
 
    return *this;
 }
@@ -631,14 +606,17 @@ Matrix& Matrix::logm()
 
 // Output matrix elements in text, used when outputting the Wilson lines
 // H.M. 20160801
-string Matrix::getElementsText()
+string Matrix::getElementsText() const
 {
     stringstream ss;
+    // BUGFIX: the default stream precision (6 significant digits) loses
+    // ~10 digits of the Wilson lines; these text files are read back by
+    // initMethod 10, so the truncation corrupted restarts/analysis.
+    ss.precision(17);
     for (int i=0; i<nn; i++)
     {
         ss << e[i].real() << " " << e[i].imag() << " ";
     }
     return ss.str();
 }
-
 
