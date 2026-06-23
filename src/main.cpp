@@ -140,10 +140,7 @@ int main(int argc, char *argv[])
   {
     lat->cells[i]->setUi(lat->cells[i]->getU());
   }
-  
-  // Save initial state Wilson lines
-  //lat->PrintWilsonLines("wline_evolution/step_0");
-  
+   
   // allocate memory
   complex<double> ** xi;
   xi = new complex<double>*[param->getSize()*param->getSize()];
@@ -187,7 +184,7 @@ int main(int argc, char *argv[])
     CKxi[i] = new complex<double>[Nc2m1];
   }
   
-  //// Following only for old code without simple langevin step
+  //// Additional memory allocations if simple algenvin step is not used 
   
   // C(K,U^{ab} xi^a), vector in a (color)
   complex<double> ** CKUxi;
@@ -220,7 +217,7 @@ int main(int argc, char *argv[])
     }
   }
   
-  // H.M. matrix V xsi V^\dagger
+  // Matrix V xsi V^\dagger, if simple lagenvin step is used, this is the only matrix needed
   Matrix ** VxsiVx;
   Matrix ** VxsiVy;
   Matrix zero_matrix(param->getNc(), 0);  // Optimize: easy to set
@@ -372,35 +369,24 @@ int main(int argc, char *argv[])
           K[pos]->push_back(sqrt(alphas)*(cos(Pi*y)*(sin(2.*Pi*x)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.))))/nn[0] * mass_regulator);
           K[pos]->push_back(sqrt(alphas)*(cos(Pi*x)*(sin(2.*Pi*y)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.))))/nn[0] * mass_regulator);
           // S is a 1d vector
-	if (param->getSimpleLangevin()==false)
-{
-          // BUGFIX: the original had cos^2(Pi*y) on the x-term but cos^4(Pi*x)
-          // on the y-term (the kernel must be symmetric under x<->y; compare
-          // the fixed-coupling branch above), and multiplied by the mass
-          // regulator only once although S ~ K^2 (the fixed-coupling branch
-          // correctly uses mass_regulator^2).
-          S[pos]->push_back(alphas*(pow( cos(Pi*y) ,2.)*pow( sin(2.*Pi*x)/(2.*Pi) ,2.)+pow( cos(Pi*x) ,2.)*pow( sin(2.*Pi*y)/(2.*Pi) ,2.))
-                            /pow( (pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)) ,2.)/nn[0]/nn[0] * mass_regulator * mass_regulator);
-          
- 	}         
-          // 		  if(abs(x)<0.1 && abs(y)<0.1)
-          // 		    {
-          // 		      cout << "x=" << x << ", y=" << y << endl;
-          // 		      cout << "S1=" << (pow( cos(Pi*y) ,4.)*pow( sin(2.*Pi*x)/(2.*Pi) ,2.)+pow( cos(Pi*x) ,4.)*pow( sin(2.*Pi*y)/(2.*Pi) ,2.))
-          // 			/pow( (pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)) ,2.)/nn[0]/nn[0]
-          // 			   << "S2=" << (pow( cos(Pi*y) ,2.)*pow( sin(2.*Pi*x)/(2.*Pi) ,2.)+pow( cos(Pi*x) ,2.)*pow( sin(2.*Pi*y)/(2.*Pi) ,2.))
-          // 			/pow( (pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)) ,2.)/nn[0]/nn[0] << ", std S=" << 1./r2 << endl;
-          // 		      cout << "Kx1=" << (cos(Pi*y)*cos(Pi*y)*(sin(2.*Pi*x)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.))))/nn[0]
-          // 			   << "Kx2=" << (cos(Pi*y)*(sin(2.*Pi*x)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.))))/nn[0]
-          // 			   << ", std Kx=" << x/r2*nn[0] << endl;
-          // 		      cout << "Ky1=" << (cos(Pi*x)*cos(Pi*x)*(sin(2.*Pi*y)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.))))/nn[0]
-          // 			   << "Ky2=" << (cos(Pi*x)*(sin(2.*Pi*y)/(2.*Pi))/((pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.))))/nn[0]
-          // 			   << ", std Ky=" << y/r2*nn[0] << endl;
-          // 		}
+          if (param->getSimpleLangevin()==false)
+          {
+            // BUGFIX: the original code (before commit 8167d57c732d3d7967985ceb48323738423bf26a) 
+            // had cos^2(Pi*y) on the x-term but cos^4(Pi*x)
+            // on the y-term (the kernel must be symmetric under x<->y; compare
+            // the fixed-coupling branch above), and multiplied by the mass
+            // regulator only once although S ~ K^2 (the fixed-coupling branch
+            // correctly uses mass_regulator^2).
+            S[pos]->push_back(alphas*(pow( cos(Pi*y) ,2.)*pow( sin(2.*Pi*x)/(2.*Pi) ,2.)+pow( cos(Pi*x) ,2.)*pow( sin(2.*Pi*y)/(2.*Pi) ,2.))
+                              /pow( (pow( sin(Pi*x)/Pi ,2.) + pow( sin(Pi*y)/Pi ,2.)) ,2.)/nn[0]/nn[0] * mass_regulator * mass_regulator);
+          }         
+        
         }
       }
     }
   }
+
+  // Initialization done
   
 		
   cout << "alphas_0=" << 4.*param->PI/((11*param->getNc()-2*Nf)/3.*log(mu0*mu0/Lambda2)) << endl;
@@ -535,7 +521,6 @@ int main(int argc, char *argv[])
   //  measure->sixPointFunctionSquare(param, lat, 0); //S_6
   //   cout << "Measure: Dionysis' stuff" << endl;
   //   measure->twoPointFunctions(param, lat, 0);
-  cout << "done." << endl;
   
   
   // OPT: the adjoint generators (TA)^a_{bc} are extremely sparse (~6 of 64
@@ -549,7 +534,7 @@ int main(int argc, char *argv[])
   {
     for (int b=0; b<Nc2m1; b++)
       for (int c=0; c<Nc2m1; c++)
-        if (group->getTA(a).get(b,c)!=0.)
+        if (group->getTA(a).get(b,c)!=0.)  // this is safe as values for generators are assigned hard-coded values exactly once Group::Group(int Nc) and never changed
           TAsparse[a].push_back({b,c,group->getTA(a).get(b,c)});
   }
   
@@ -778,11 +763,10 @@ int main(int argc, char *argv[])
     
     
     
-    ///// New code for evolution without adjoint
+    ///// Simple langevan step without the deterministic term, following 1212.4825 
     if (param->getSimpleLangevin())
     {
-      // H.M.
-      // H.M. matrix V xsi V^\dagger
+      // matrix V xsi V^\dagger
       // OPT: use V (sum_a xi^a t^a) V^dag instead of sum_a xi^a (V t^a V^dag).
       // This replaces 2*(Nc^2-1) triple matrix products (and as many
       // conjugations) per site by building two small color matrices and doing
@@ -792,7 +776,6 @@ int main(int argc, char *argv[])
 #endif
       for (int i=0; i<cells; i++)
       {
-#ifndef JIMWLK_LEGACY_SL_SUM
         const int nc = zero_matrix.getNDim();
         Matrix Ax(nc,0.), Ay(nc,0.);
         for (int a=0; a<Nc2m1; a++)
@@ -807,23 +790,6 @@ int main(int argc, char *argv[])
         Matrix::mult(tmp, Uconj, *VxsiVx[i]);
         Matrix::mult(lat->cells[i]->getU(), Ay, tmp);
         Matrix::mult(tmp, Uconj, *VxsiVy[i]);
-#else
-        // Legacy summation order, bitwise identical to the original code
-        // (build with -DLEGACY_SL_SUM=ON; ~8x more matrix products).
-        // Differences to the default branch are pure floating-point
-        // re-association, < 1e-15 per step.
-        *VxsiVx[i] = zero_matrix;
-        *VxsiVy[i] = zero_matrix;
-        for (int a=0; a<Nc2m1; a++)
-        {
-          Matrix Uconj = lat->cells[i]->getU();
-          Uconj.conjg();
-          *VxsiVx[i] = *VxsiVx[i] + xi2[i][a]* lat->cells[i]->getU()
-              *group->getT(a) * Uconj;
-          *VxsiVy[i] = *VxsiVy[i] + xi2[i][Nc2m1+a]* lat->cells[i]->getU()
-              *group->getT(a) * Uconj;
-        }
-#endif
       }
       
       // FFT V xi V, save output to same array
@@ -875,20 +841,10 @@ int main(int argc, char *argv[])
     
     
     
-    //cout << "omega2 done" << endl;
     
-    
-    // here impose infrared regulator on newly updated U-fields
+    // here one could impose infrared regulator on newly updated U-fields
     //      infrared->regulate(lat, group, param, random, ids);
     
-    //cout << " done with step" << endl;
-    
-    // Save intermediate step Wlines
-    //if (ids%10==0)
-    //{
-    //  stringstream fname; fname << "wline_evolution/step_" << ids;
-    //  lat->PrintWilsonLines(fname.str());
-   // }
     
     // measure quantities
     if ((ids)%param->getMeasureSteps()==0)
@@ -938,7 +894,6 @@ int main(int argc, char *argv[])
   // finalize
   for(int i=0; i<param->getSize()*param->getSize(); i++)
   {
-    // BUGFIX: arrays allocated with new[] must be released with delete[]
     delete [] xi[i];
     delete [] xi2[i];
     delete K[i];
